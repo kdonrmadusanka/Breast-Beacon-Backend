@@ -9,5 +9,12 @@
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mongoose": "^8.15.2",
+    "multer": "^2.0.1",
+    "python-shell": "^5.0.0"
   }
 }
