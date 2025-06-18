@@ -19,7 +19,7 @@ app.use(express.json());
 
 // MongoDB Connection
 mongoose
-  .connect("mongodb://localhost/breastcancer_db", {
+  .connect("mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
