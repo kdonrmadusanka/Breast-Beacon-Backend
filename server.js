@@ -19,12 +19,10 @@ app.use(express.json());
 
 // MongoDB Connection
 mongoose
-  .connect("mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("MongoDB connected"));
-
+  .connect("mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon")
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
+  
 // Routes
 app.use("/api/mammograms", mammogramRoutes);
 app.use("/api/chatMessages", chatMessageRoutes);
