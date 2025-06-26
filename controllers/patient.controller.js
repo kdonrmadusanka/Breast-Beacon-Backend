@@ -1,14 +1,37 @@
 const Patient = require("../models/patient.model");
 
-// Create a patient
+// Create a patient with email existence check and auto-increment ID
 exports.createPatient = async (req, res) => {
   try {
     const { email, name, dateOfBirth, password } = req.body;
+
+    // Check if email already exists
+    const existingPatient = await Patient.findOne({ email });
+    if (existingPatient) {
+      return res.status(400).json({
+        error: "Registration failed",
+        message: "Email already exists",
+      });
+    }
+
+    // Create new patient - the pre-save hook will handle the patientId
     const patient = new Patient({ email, name, dateOfBirth, password });
     await patient.save();
-    res.status(201).json(patient);
+
+    // Return the patient data without the password
+    const patientData = patient.toObject();
+    delete patientData.password;
+
+    res.status(201).json({
+      message: "Patient created successfully",
+      patient: patientData,
+    });
   } catch (error) {
-    res.status(500).json({ error: "Server error", details: error.message });
+    console.error("Error creating patient:", error);
+    res.status(500).json({
+      error: "Server error",
+      message: error.message,
+    });
   }
 };
 
