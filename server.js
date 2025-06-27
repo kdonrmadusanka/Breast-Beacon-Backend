@@ -8,6 +8,7 @@ const mammogramRoutes = require("./routes/mammogram.routes");
 const chatMessageRoutes = require("./routes/chatMessage.routes");
 const patientRoutes = require("./routes/patient.routes");
 const doctorRoutes = require("./routes/doctor.routes");
+const clinicianRoutes = require("./routes/clinician.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,15 +20,18 @@ app.use(express.json());
 
 // MongoDB Connection
 mongoose
-  .connect("mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon")
+  .connect(
+    "mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon"
+  )
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
-  
+
 // Routes
 app.use("/api/mammograms", mammogramRoutes);
 app.use("/api/chatMessages", chatMessageRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/doctors", doctorRoutes);
+app.use("/api/clinician", clinicianRoutes);
 
 // Socket.IO Connection
 io.on("connection", (socket) => {
