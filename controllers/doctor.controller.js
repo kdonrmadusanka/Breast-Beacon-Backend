@@ -1,7 +1,5 @@
 const Doctor = require("../models/doctor.model");
 
-const Doctor = require("../models/Doctor");
-
 // Create a doctor with enhanced validation and security
 exports.createDoctor = async (req, res) => {
   try {
