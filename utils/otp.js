@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+require("dotenv").config();
 
 // In-memory store for OTPs (use Redis or database in production)
 const otpStore = new Map();
@@ -8,7 +9,7 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: "breastbeacon@gmail.com",
-    pass: "gjon cybx xbhj eabf", // Replace with your app-specific password
+    pass: process.env.APP_PASS, // Replace with your app-specific password
   },
 });
 
