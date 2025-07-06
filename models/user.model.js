@@ -1,13 +1,16 @@
+// models/User.js
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
+  clerkUserId: { type: String, required: true, unique: true }, // Clerk's user ID
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Hashed
+  password: { type: String }, // Optional since Clerk handles auth
   role: {
     type: String,
     enum: ["patient", "doctor", "clinician", "admin"],
     required: true,
+    default: "patient",
   },
   profile: {
     name: { type: String, required: true },
