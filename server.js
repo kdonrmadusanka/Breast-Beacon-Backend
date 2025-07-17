@@ -1,53 +1,99 @@
+require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const { Server } = require("socket.io");
+const path = require("path");
 const http = require("http");
-const ChatMessage = require("./models/chatMessage.model"); // Assuming you have this model
-const mammogramRoutes = require("./routes/mammogram.routes");
-const chatMessageRoutes = require("./routes/chatMessage.routes");
-const patientRoutes = require("./routes/patient.routes");
-const doctorRoutes = require("./routes/doctor.routes");
-const clinicianRoutes = require("./routes/clinician.routes");
+const { initSocketIO, getIO } = require("./services/websocket.service");
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const httpServer = http.createServer(app);
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Routes
+const authRoutes = require("./routes/auth.routes");
+const dicomRoutes = require("./routes/dicom.routes");
+const analysisRoutes = require("./routes/analysis.routes");
+const userRoutes = require("./routes/user.routes");
+
+app.use("/api/auth", authRoutes);
+app.use("/api/dicom", dicomRoutes);
+app.use("/api/analysis", analysisRoutes);
+app.use("/api/user", userRoutes);
 
 // MongoDB Connection
 mongoose
-  .connect(
-    "mongodb+srv://breastbeacon:bb12345@breastbeacon.7o4hugj.mongodb.net/?retryWrites=true&w=majority&appName=breastbeacon"
-  )
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err);
+    process.exit(1);
+  });
 
-// Routes
-app.use("/api/mammograms", mammogramRoutes);
-app.use("/api/chatMessages", chatMessageRoutes);
-app.use("/api/patients", patientRoutes);
-app.use("/api/doctors", doctorRoutes);
-app.use("/api/clinician", clinicianRoutes);
+// Initialize Socket.IO (ONLY HERE)
+initSocketIO(httpServer);
 
-// Socket.IO Connection
-io.on("connection", (socket) => {
-  socket.on("message", async (msg) => {
-    const chatMessage = new ChatMessage({
-      patientId: msg.patientId,
-      doctorId: msg.doctorId,
-      mammogramId: msg.mammogramId,
-      sender: msg.sender,
-      message: msg.text,
-      imageAction: msg.imageAction,
-    });
-    await chatMessage.save();
-    io.emit("message", msg);
+// Health Check Endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date(),
+    services: {
+      database:
+        mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      socketio: getIO() ? "active" : "inactive",
+    },
   });
 });
 
-// Server Start
-server.listen(5000, () => console.log("Server running on port 5000"));
+// Root Endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "Breast Cancer Analysis Platform API",
+    status: "operational",
+    documentation: process.env.API_DOCS_URL || "https://docs.example.com",
+    socketio: `http://localhost:${process.env.PORT || 5000}`,
+  });
+});
+
+// Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error("❗ Server error:", err.stack);
+  const statusCode = err.statusCode || 500;
+  const message = statusCode === 500 ? "Internal server error" : err.message;
+  res.status(statusCode).json({
+    success: false,
+    error: message,
+    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+  });
+});
+
+// Graceful Shutdown
+process.on("SIGTERM", () => {
+  console.log("🛑 SIGTERM received, shutting down gracefully");
+  httpServer.close(() => {
+    console.log("✅ HTTP server closed");
+    mongoose.connection.close(false, () => {
+      console.log("✅ MongoDB connection closed");
+      process.exit(0);
+    });
+  });
+});
+
+// Start Server
+const PORT = process.env.PORT || 5000;
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
+  console.log(`🔌 Socket.IO: http://localhost:${PORT}`);
+});

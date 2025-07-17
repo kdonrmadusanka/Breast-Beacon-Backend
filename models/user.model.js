@@ -1,49 +1,91 @@
-// models/User.js
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
 
-const userSchema = new Schema({
-  clerkUserId: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  role: {
-    type: String,
-    enum: ["patient", "doctor", "clinician", "admin"],
-    required: true,
-    default: "patient",
-  },
-  profile: {
-    // Clerk handles name/email in their system
-    licenseNumber: {
+const userSchema = new mongoose.Schema(
+  {
+    email: {
       type: String,
-      required: function () {
-        return this.role === "doctor" || this.role === "clinician";
-      },
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
     },
-    specialty: {
+    password: {
       type: String,
-      required: function () {
-        return this.role === "doctor" || this.role === "clinician";
-      },
+      required: true,
+      minlength: 6,
     },
-    bio: String,
-    location: String,
-    // Other app-specific profile data
+    role: {
+      type: String,
+      enum: ["patient", "clinician", "admin"],
+      default: "patient",
+    },
+    status: {
+      type: String,
+      enum: ["active", "inactive", "suspended"],
+      default: "active",
+    },
+    profileCompleted: {
+      type: Boolean,
+      default: true, // Changed to true since profile completion is not required
+    },
+    firstName: {
+      type: String,
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      trim: true,
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+    },
+    dateOfBirth: {
+      type: Date,
+    },
+    lastLogin: {
+      type: Date,
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: {
+      type: String,
+    },
+    passwordResetToken: {
+      type: String,
+    },
+    passwordResetExpires: {
+      type: Date,
+    },
   },
-  preferences: {
-    notifications: { type: Boolean, default: true },
-    theme: { type: String, default: "light" },
-    // Other preferences
-  },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
+  {
+    timestamps: true,
+  }
+);
 
+// Pre-save middleware to update lastLogin
 userSchema.pre("save", function (next) {
-  this.updatedAt = new Date();
+  if (this.isModified("password") || this.isNew) {
+    this.lastLogin = new Date();
+  }
   next();
 });
 
-module.exports = mongoose.model("User", userSchema);
+// Instance method to check if profile is complete
+userSchema.methods.isProfileComplete = function () {
+  return (
+    this.firstName && this.lastName && this.phoneNumber && this.dateOfBirth
+  );
+};
+
+// Static method to find active users
+userSchema.statics.findActiveUsers = function () {
+  return this.find({ status: "active" });
+};
+
+const UserModel = mongoose.model("User", userSchema);
+
+module.exports = UserModel;
