@@ -1,266 +1,179 @@
-import { AuditLog } from "../models/User.model.js";
-import Mammogram from "../models/Mammogram.model.js";
-import { successResponse } from "../utils/responseHandler.js";
-import { AppError } from "../utils/errorHandler.js";
-import winston from "winston";
-import multer from "multer";
-import path from "path";
-import fs from "fs/promises";
-import crypto from "crypto";
-import dicomParser from "dicom-parser";
+import Mammogram from '../models/Mammogram.js';
+import fs from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp'; // For image processing
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import mammogramMetadataParser from '../utils/mammogram-metadata-parser.js'; // Hypothetical DICOM parser
+import crypto from 'crypto';
 
-// Configure Winston logger
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.File({ filename: "logs/mammogram.log" }),
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-  ],
-});
-
-// Configure multer for file uploads
-const uploadDir = path.join(process.cwd(), "uploads/mammograms");
-fs.mkdir(uploadDir, { recursive: true }).catch((err) => {
-  logger.error("Failed to create upload directory", { error: err.message });
-});
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${req.user._id}-${uniqueSuffix}${ext}`);
-  },
-});
-
-const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (ext !== ".dcm" && ext !== ".png") {
-    return cb(
-      new AppError("Only DICOM (.dcm) or PNG files are allowed", 400),
-      false
-    );
+// Configure S3 if using cloud storage
+const s3Client = process.env.STORAGE_TYPE === 's3' ? new S3Client({ 
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_KEY
   }
-  cb(null, true);
-};
+}) : null;
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-}).single("mammogram");
-
-// Encryption key (should be stored securely in production)
-const ENCRYPTION_KEY =
-  process.env.MAMMOGRAM_ENCRYPTION_KEY ||
-  crypto.randomBytes(32).toString("hex");
-const IV_LENGTH = 16; // AES-256-CBC requires 16-byte IV
-
-/**
- * @desc    Encrypt a file using AES-256-CBC
- * @param {string} inputPath - Path to the input file
- * @param {string} outputPath - Path to save the encrypted file
- * @returns {Promise<void>}
- */
-const encryptFile = async (inputPath, outputPath) => {
+export const uploadMammogram = async (req, res) => {
   try {
-    const inputData = await fs.readFile(inputPath);
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv(
-      "aes-256-cbc",
-      Buffer.from(ENCRYPTION_KEY, "hex"),
-      iv
-    );
-    const encrypted = Buffer.concat([cipher.update(inputData), cipher.final()]);
-    await fs.writeFile(outputPath, Buffer.concat([iv, encrypted]));
-    await fs.unlink(inputPath); // Remove unencrypted file
-    logger.info("File encrypted successfully", { outputPath });
-  } catch (error) {
-    logger.error("File encryption failed", { inputPath, error: error.message });
-    throw new AppError("Failed to encrypt file", 500);
-  }
-};
-
-/**
- * @desc    Validate DICOM file integrity
- * @param {string} filePath - Path to the DICOM file
- * @returns {Promise<boolean>} True if valid, throws error if invalid
- */
-const validateDicom = async (filePath) => {
-  try {
-    const data = await fs.readFile(filePath);
-    dicomParser.parseDicom(data); // Throws if invalid
-    return true;
-  } catch (error) {
-    logger.error("DICOM validation failed", { filePath, error: error.message });
-    throw new AppError("Invalid DICOM file", 400);
-  }
-};
-
-/**
- * @desc    Upload a mammogram image (DICOM or PNG)
- * @route   POST /api/mammograms/upload
- * @access  Private (patient only)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- */
-const uploadMammogram = async (req, res, next) => {
-  try {
-    // Check if user is a patient
-    if (req.user.role !== "patient") {
-      throw new AppError("Only patients can upload mammograms", 403);
-    }
-
-    // Handle file upload with multer
-    await new Promise((resolve, reject) => {
-      upload(req, res, (err) => {
-        if (err instanceof multer.MulterError) {
-          return reject(new AppError(`Upload error: ${err.message}`, 400));
-        } else if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-
+    // Validate required fields
     if (!req.file) {
-      throw new AppError("No file uploaded", 400);
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const { patientId, notes, laterality, viewPosition } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ error: 'Patient ID is required' });
     }
 
-    const fileExt = path.extname(req.file.filename).toLowerCase();
-    const encryptedPath = path.join(uploadDir, `${req.file.filename}.enc`);
-
-    // Validate DICOM file if applicable
-    if (fileExt === ".dcm") {
-      await validateDicom(req.file.path);
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/dicom'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Only JPEG, PNG, or DICOM images are allowed' });
     }
 
-    // Encrypt the uploaded file
-    await encryptFile(req.file.path, encryptedPath);
+    // Validate file size (e.g., 20MB max for DICOM)
+    const maxSize = req.file.mimetype === 'image/dicom' ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (req.file.size > maxSize) {
+      return res.status(400).json({ error: `File size exceeds ${maxSize/(1024*1024)}MB limit` });
+    }
 
-    // Save metadata to Mammogram model
-    const mammogram = await Mammogram.create({
-      patientId: req.user._id,
-      filePath: encryptedPath,
+    // Generate secure filename and paths
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    const uniqueId = uuidv4();
+    const sanitizedFilename = `mammo_${patientId}_${laterality || 'unknown'}_${viewPosition || 'unknown'}_${uniqueId}${fileExtension}`;
+    
+    // Create directory structure if using local storage
+    const uploadDate = new Date();
+    const yearMonth = `${uploadDate.getFullYear()}-${(uploadDate.getMonth()+1).toString().padStart(2, '0')}`;
+    const patientFolder = `patient_${patientId}`;
+    const localBasePath = path.join(process.env.UPLOAD_DIR, 'mammograms', yearMonth, patientFolder);
+    
+    // Ensure directories exist
+    if (process.env.STORAGE_TYPE === 'local') {
+      fs.mkdirSync(localBasePath, { recursive: true });
+    }
+
+    // Process the image based on type
+    let processedFilePath;
+    let metadata = {};
+    
+    if (req.file.mimetype === 'image/dicom') {
+      // Special handling for DICOM files
+      metadata = await mammogramMetadataParser(req.file.path);
+      processedFilePath = path.join(localBasePath, sanitizedFilename);
+      fs.renameSync(req.file.path, processedFilePath);
+    } else {
+      // Process standard images (convert to consistent format, optimize)
+      processedFilePath = path.join(localBasePath, sanitizedFilename);
+      await sharp(req.file.path)
+        .jpeg({ quality: 90, mozjpeg: true }) // Convert to high-quality JPEG
+        .resize(3000, 4000, { fit: 'inside', withoutEnlargement: true }) // Standardize size
+        .toFile(processedFilePath);
+      fs.unlinkSync(req.file.path); // Remove original
+    }
+
+    // If using S3, upload to cloud storage
+    let storagePath = processedFilePath;
+    if (process.env.STORAGE_TYPE === 's3') {
+      const s3Key = `mammograms/${yearMonth}/${patientFolder}/${sanitizedFilename}`;
+      await s3Client.send(new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: s3Key,
+        Body: fs.createReadStream(processedFilePath),
+        ContentType: req.file.mimetype,
+        Metadata: metadata
+      }));
+      storagePath = s3Key;
+      
+      // Optionally remove local file after S3 upload
+      if (process.env.CLEAN_LOCAL_UPLOADS === 'true') {
+        fs.unlinkSync(processedFilePath);
+      }
+    }
+
+    // Create database record
+    const newMammogram = new Mammogram({
+      patientId,
       originalFilename: req.file.originalname,
-      fileType: fileExt === ".dcm" ? "DICOM" : "PNG",
+      storagePath,
+      storageType: process.env.STORAGE_TYPE || 'local',
+      notes: notes || '',
+      uploadedBy: user.id,
       fileSize: req.file.size,
-      uploadDate: new Date(),
-    });
-
-    // Create audit log for mammogram upload
-    await AuditLog.create({
-      userId: req.user._id,
-      action: "mammogram_uploaded",
-      details: {
-        email: req.user.email,
-        mammogramId: mammogram._id,
-        fileType: mammogram.fileType,
-        fileSize: mammogram.fileSize,
+      fileType: req.file.mimetype,
+      metadata: {
+        laterality,
+        viewPosition,
+        ...metadata
       },
-      ipAddress: req.ip,
-      deviceInfo: req.headers["user-agent"] || "Unknown",
-    });
-    logger.info("Audit log created for mammogram upload", {
-      userId: req.user._id,
-      mammogramId: mammogram._id,
+      uploadDate,
+      checksum: await calculateFileChecksum(processedFilePath) // For data integrity
     });
 
-    logger.info("Mammogram uploaded successfully", {
-      userId: req.user._id,
-      mammogramId: mammogram._id,
-      fileType: mammogram.fileType,
+    await newMammogram.save();
+    
+    // Return enriched response
+    res.status(201).json({
+      success: true,
+      mammogram: newMammogram,
+      previewUrl: generatePreviewUrl(newMammogram) // Helper function to generate access URL
     });
 
-    return successResponse(
-      res,
-      {
-        mammogram: {
-          id: mammogram._id,
-          fileType: mammogram.fileType,
-          uploadDate: mammogram.uploadDate,
-        },
-      },
-      "Mammogram uploaded successfully",
-      201,
-      req,
-      "mammogram_uploaded"
-    );
-  } catch (error) {
-    logger.error("Failed to upload mammogram", {
-      userId: req.user._id,
-      error: error.message,
-    });
-    if (req.file) {
-      await fs.unlink(req.file.path).catch(() => {}); // Clean up unencrypted file on error
+  } catch (err) {
+    console.error('Error uploading mammogram:', err);
+    
+    // Clean up files if error occurred
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
     }
-    next(error);
+    
+    res.status(500).json({ 
+      error: 'Failed to upload mammogram',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
-/**
- * @desc    Get all mammograms for the current patient
- * @route   GET /api/mammograms
- * @access  Private (patient only)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- */
-const getMammograms = async (req, res, next) => {
+// Helper function to calculate file checksum
+async function calculateFileChecksum(filePath) {
+  const hash = crypto.createHash('sha256');
+  const stream = fs.createReadStream(filePath);
+  return new Promise((resolve, reject) => {
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+// Helper function to generate access URL based on storage type
+function generatePreviewUrl(mammogram) {
+  if (mammogram.storageType === 's3') {
+    return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${mammogram.storagePath}`;
+  }
+  return `${process.env.APP_URL}/api/mammograms/${mammogram._id}/preview`;
+}
+
+// Get all mammograms (with pagination)
+export const getMammograms = async (req, res) => {
   try {
-    if (req.user.role !== "patient") {
-      throw new AppError("Only patients can view their mammograms", 403);
-    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    const mammograms = await Mammogram.find({ patientId: req.user._id })
-      .select("-filePath") // Exclude filePath for security
-      .lean();
+    const mammograms = await Mammogram.find()
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
-    // Create audit log for mammogram retrieval
-    await AuditLog.create({
-      userId: req.user._id,
-      action: "mammograms_retrieved",
-      details: { email: req.user.email, mammogramCount: mammograms.length },
-      ipAddress: req.ip,
-      deviceInfo: req.headers["user-agent"] || "Unknown",
-    });
-    logger.info("Audit log created for mammogram retrieval", {
-      userId: req.user._id,
-      mammogramCount: mammograms.length,
-    });
-
-    logger.info("Mammograms retrieved successfully", {
-      userId: req.user._id,
-      mammogramCount: mammograms.length,
-    });
-
-    return successResponse(
-      res,
-      { mammograms },
-      "Mammograms retrieved successfully",
-      200,
-      req,
-      "mammograms_retrieved"
-    );
-  } catch (error) {
-    logger.error("Failed to retrieve mammograms", {
-      userId: req.user._id,
-      error: error.message,
-    });
-    next(error);
+    res.json(mammograms);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
-export { uploadMammogram, getMammograms };
+// Other controller functions...
+export const getMammogramById = async (req, res) => { /* ... */ };
+export const deleteMammogram = async (req, res) => { /* ... */ };

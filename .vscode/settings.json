@@ -1,3 +1,12 @@
 {
-    "cmake.sourceDirectory": "/home/kdrm/Breast-Beacon-Backend/py-faster-rcnn/caffe-fast-rcnn"
+    "cmake.configureArgs": [
+    "-DBUILD_python=OFF",
+    "-DCMAKE_BUILD_TYPE=Debug"
+    ],
+    "cmake.sourceDirectory": "/home/kdrm/Projects/BB/Breast-Beacon-Backend/caffe",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "python.analysis.extraPaths": [
+        "./py-faster-rcnn",
+        "./py_faster_rcnn"
+    ]
 }
