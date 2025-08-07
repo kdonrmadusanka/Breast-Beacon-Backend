@@ -10,8 +10,31 @@ export const registerUser = async (req, res) => {
   try {
     const { firstName, lastName, email, password, role } = req.body;
 
+    // Log registration attempt
+    await logEvent({
+      eventType: "security",
+      action: "user_registration_attempt",
+      status: "success",
+      metadata: {
+        email,
+        role,
+        ip: req.ip,
+      },
+      req,
+    });
+
     // Basic validation
     if (!firstName || !lastName || !email || !password) {
+      await logEvent({
+        eventType: "security",
+        action: "user_registration_failed",
+        status: "failure",
+        metadata: {
+          reason: "missing_fields",
+          fields: { firstName, lastName, email, password: !!password },
+        },
+        req,
+      });
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields",
@@ -21,6 +44,16 @@ export const registerUser = async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      await logEvent({
+        eventType: "security",
+        action: "user_registration_failed",
+        status: "failure",
+        metadata: {
+          reason: "email_in_use",
+          email,
+        },
+        req,
+      });
       return res.status(409).json({
         success: false,
         message: "Email already in use",
@@ -40,6 +73,16 @@ export const registerUser = async (req, res) => {
       const { licenseNumber, specialization, institution } = req.body;
 
       if (!licenseNumber || !specialization || !institution) {
+        await logEvent({
+          eventType: "security",
+          action: "medical_registration_failed",
+          status: "failure",
+          metadata: {
+            reason: "missing_medical_fields",
+            fields: { licenseNumber, specialization, institution },
+          },
+          req,
+        });
         return res.status(400).json({
           success: false,
           message:
@@ -65,6 +108,20 @@ export const registerUser = async (req, res) => {
 
     newUser.active = true;
 
+    // Log user creation
+    await logEvent({
+      eventType: "security",
+      action: "user_created",
+      status: "success",
+      userId: newUser._id,
+      userRole: newUser.role,
+      metadata: {
+        isVerified: newUser.isVerified,
+        isMedicalProfessional,
+      },
+      req,
+    });
+
     // If the user is a patient, create a patient record with generated ID
     if (newUser.role === "patient") {
       const patientId = await generatePatientId();
@@ -80,15 +137,39 @@ export const registerUser = async (req, res) => {
         phoneNumber,
         address,
       });
+
+      // Log patient record creation
+      await logEvent({
+        eventType: "system",
+        action: "patient_record_created",
+        status: "success",
+        userId: newUser._id,
+        metadata: {
+          patientId,
+          hasDemographics: !!(dateOfBirth && gender),
+        },
+        req,
+      });
     }
 
     // Generate JWT token
     const token = newUser.generateAuthToken();
 
-    // IMPORTANT: Save the token to the user's tokens array
+    // Save the token to the user's tokens array
     await newUser.saveToken(token);
 
-    console.log(token);
+    // Log token generation
+    await logEvent({
+      eventType: "security",
+      action: "auth_token_generated",
+      status: "success",
+      userId: newUser._id,
+      metadata: {
+        tokenType: "jwt",
+        tokenLength: token.length, // Don't log actual token
+      },
+      req,
+    });
 
     // Prepare user data for response (without password)
     const userData = {
@@ -109,11 +190,36 @@ export const registerUser = async (req, res) => {
 
     // Send appropriate email based on user type
     if (newUser.role === "patient") {
-      await sendWelcomeEmail({
-        email: newUser.email,
-        name: `${newUser.firstName} ${newUser.lastName}`,
-        role: "patient",
-      });
+      try {
+        await sendWelcomeEmail({
+          email: newUser.email,
+          name: `${newUser.firstName} ${newUser.lastName}`,
+          role: "patient",
+        });
+        await logEvent({
+          eventType: "system",
+          action: "welcome_email_sent",
+          status: "success",
+          userId: newUser._id,
+          metadata: {
+            emailType: "welcome",
+            recipient: newUser.email,
+          },
+          req,
+        });
+      } catch (emailError) {
+        await logEvent({
+          eventType: "system",
+          action: "welcome_email_failed",
+          status: "failure",
+          userId: newUser._id,
+          metadata: {
+            error: emailError.message,
+            recipient: newUser.email,
+          },
+          req,
+        });
+      }
     } else {
       // Create verification token for medical professionals
       const verificationToken = crypto.randomBytes(32).toString("hex");
@@ -123,12 +229,38 @@ export const registerUser = async (req, res) => {
         .digest("hex");
       await newUser.save();
 
-      await sendVerificationEmail({
-        email: newUser.email,
-        name: `${newUser.firstName} ${newUser.lastName}`,
-        verificationToken,
-        role: newUser.role,
-      });
+      try {
+        await sendVerificationEmail({
+          email: newUser.email,
+          name: `${newUser.firstName} ${newUser.lastName}`,
+          verificationToken,
+          role: newUser.role,
+        });
+        await logEvent({
+          eventType: "security",
+          action: "verification_email_sent",
+          status: "success",
+          userId: newUser._id,
+          metadata: {
+            emailType: "verification",
+            recipient: newUser.email,
+            verificationTokenLength: verificationToken.length, // Don't log actual token
+          },
+          req,
+        });
+      } catch (emailError) {
+        await logEvent({
+          eventType: "security",
+          action: "verification_email_failed",
+          status: "failure",
+          userId: newUser._id,
+          metadata: {
+            error: emailError.message,
+            recipient: newUser.email,
+          },
+          req,
+        });
+      }
     }
 
     // Set secure HTTP-only cookie
@@ -137,6 +269,20 @@ export const registerUser = async (req, res) => {
       secure: process.env.NODE_ENV === "production",
       maxAge: 24 * 60 * 60 * 1000, // 1 day
       sameSite: "strict",
+    });
+
+    // Log successful registration completion
+    await logEvent({
+      eventType: "security",
+      action: "user_registration_completed",
+      status: "success",
+      userId: newUser._id,
+      userRole: newUser.role,
+      metadata: {
+        registrationMethod: "standard",
+        verificationStatus: newUser.isVerified,
+      },
+      req,
     });
 
     return res.status(201).json({
@@ -150,6 +296,23 @@ export const registerUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Registration error:", error);
+
+    // Log registration failure
+    await logEvent({
+      eventType: "security",
+      action: "user_registration_failed",
+      status: "failure",
+      metadata: {
+        error: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        requestBody: {
+          email: req.body.email,
+          role: req.body.role,
+        },
+      },
+      req,
+    });
+
     return res.status(500).json({
       success: false,
       message: "Registration failed. Please try again.",
