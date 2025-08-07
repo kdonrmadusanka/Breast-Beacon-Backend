@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import sharp from "sharp"; // For image processing
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import mammogramMetadataParser from "../utils/mammogram-metadata-parser.js"; // Hypothetical DICOM parser
+import { anonymizeDicomFile } from "../utils/dicomAnonymizer.js";
 import crypto from "crypto";
 
 // Configure S3 if using cloud storage
@@ -28,7 +29,7 @@ const s3Client =
 
 /**
  * @swagger
- * /api/mammograms:
+ * /api/v1/mammogram/upload:
  *   post:
  *     summary: Upload a new mammogram
  *     tags: [Mammograms]
@@ -47,15 +48,18 @@ const s3Client =
  *                 description: The mammogram image file (JPEG, PNG, or DICOM)
  *               patientId:
  *                 type: string
- *                 required: true
+ *                 description: The ID of the patient (required)
  *               notes:
  *                 type: string
+ *                 description: Additional notes about the mammogram
  *               laterality:
  *                 type: string
  *                 enum: [L, R, B]
+ *                 description: Laterality of the mammogram (Left, Right, or Bilateral)
  *               viewPosition:
  *                 type: string
  *                 enum: [CC, MLO, ML, LM, AT]
+ *                 description: View position of the mammogram (e.g., Cranio-Caudal, Medio-Lateral Oblique)
  *     responses:
  *       201:
  *         description: Mammogram uploaded successfully
@@ -65,10 +69,34 @@ const s3Client =
  *               $ref: '#/components/schemas/Mammogram'
  *       400:
  *         description: Invalid input or file
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "No file uploaded"
  *       401:
  *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Unauthorized"
  *       500:
  *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to upload mammogram"
  */
 export const uploadMammogram = async (req, res) => {
   try {
@@ -82,33 +110,47 @@ export const uploadMammogram = async (req, res) => {
       return res.status(400).json({ error: "Patient ID is required" });
     }
 
-    // Validate file type
-    const allowedTypes = ["image/jpeg", "image/png", "image/dicom"];
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return res
-        .status(400)
-        .json({ error: "Only JPEG, PNG, or DICOM images are allowed" });
+    console.log("Uploaded file MIME type:", req.file.mimetype);
+
+    // Validate file type - include DICOM extensions
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/dicom",
+      "application/octet-stream", // For generic DICOM files
+      "application/dicom", // Alternative DICOM MIME type
+    ];
+
+    // Also check file extension for DICOM
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    const isDicom =
+      req.file.mimetype === "image/dicom" ||
+      req.file.mimetype === "application/octet-stream" ||
+      req.file.mimetype === "application/dicom" ||
+      fileExtension === ".dcm";
+
+    if (!allowedTypes.includes(req.file.mimetype) && !isDicom) {
+      return res.status(400).json({
+        error: "Only JPEG, PNG, or DICOM images are allowed",
+        receivedType: req.file.mimetype,
+      });
     }
 
     // Validate file size (e.g., 20MB max for DICOM)
-    const maxSize =
-      req.file.mimetype === "image/dicom" ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxSize = isDicom ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
     if (req.file.size > maxSize) {
-      return res
-        .status(400)
-        .json({
-          error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit`,
-        });
+      return res.status(400).json({
+        error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit`,
+      });
     }
 
     // Generate secure filename and paths
-    const fileExtension = path.extname(req.file.originalname).toLowerCase();
     const uniqueId = uuidv4();
     const sanitizedFilename = `mammo_${patientId}_${laterality || "unknown"}_${
       viewPosition || "unknown"
     }_${uniqueId}${fileExtension}`;
 
-    // Create directory structure if using local storage
+    // Create directory structure
     const uploadDate = new Date();
     const yearMonth = `${uploadDate.getFullYear()}-${(uploadDate.getMonth() + 1)
       .toString()
@@ -130,19 +172,44 @@ export const uploadMammogram = async (req, res) => {
     let processedFilePath;
     let metadata = {};
 
-    if (req.file.mimetype === "image/dicom") {
-      // Special handling for DICOM files
-      metadata = await mammogramMetadataParser(req.file.path);
-      processedFilePath = path.join(localBasePath, sanitizedFilename);
-      fs.renameSync(req.file.path, processedFilePath);
+    if (isDicom) {
+      // Handle DICOM files (regardless of MIME type)
+      try {
+        metadata = await mammogramMetadataParser(req.file.path);
+
+        // Anonymize the file
+        const anonymizedPath = path.join(
+          localBasePath,
+          `anon_${sanitizedFilename}`
+        );
+        await anonymizeDicomFile(req.file.path, anonymizedPath);
+
+        processedFilePath = anonymizedPath;
+      } catch (dicomError) {
+        console.error("DICOM processing failed:", dicomError);
+        throw new Error("Invalid DICOM file format");
+      } finally {
+        // Always clean up original file
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
     } else {
-      // Process standard images (convert to consistent format, optimize)
+      // Process standard images
       processedFilePath = path.join(localBasePath, sanitizedFilename);
-      await sharp(req.file.path)
-        .jpeg({ quality: 90, mozjpeg: true }) // Convert to high-quality JPEG
-        .resize(3000, 4000, { fit: "inside", withoutEnlargement: true }) // Standardize size
-        .toFile(processedFilePath);
-      fs.unlinkSync(req.file.path); // Remove original
+      try {
+        await sharp(req.file.path)
+          .jpeg({ quality: 90, mozjpeg: true })
+          .resize(3000, 4000, { fit: "inside", withoutEnlargement: true })
+          .toFile(processedFilePath);
+      } catch (imageError) {
+        console.error("Image processing failed:", imageError);
+        throw new Error("Invalid image file format");
+      } finally {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
     }
 
     // If using S3, upload to cloud storage
@@ -199,6 +266,9 @@ export const uploadMammogram = async (req, res) => {
     // Clean up files if error occurred
     if (req.file?.path && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
+    }
+    if (processedFilePath && fs.existsSync(processedFilePath)) {
+      fs.unlinkSync(processedFilePath);
     }
 
     res.status(500).json({

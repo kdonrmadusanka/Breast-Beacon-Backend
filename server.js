@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import { setupSwagger } from "./config/swagger.js"; // Import Swagger setup
 import mammogramRoutes from "./routes/mammogram.routes.js";
 import authRoutes from "./routes/auth.rotes.js";
+import { setupCronJobs } from "./utils/cronJobs.js";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -79,6 +80,8 @@ const server = app.listen(PORT, () => {
   if (process.env.NODE_ENV !== "production") {
     console.log(`📚 API docs available at http://localhost:${PORT}/api-docs`);
   }
+  // Initialize cron jobs after server starts
+  setupCronJobs();
 });
 
 // Handle unhandled promise rejections

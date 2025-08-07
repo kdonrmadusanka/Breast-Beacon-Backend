@@ -1,6 +1,6 @@
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 // Ensure upload directory exists
 const ensureUploadDir = (dir) => {
@@ -9,7 +9,7 @@ const ensureUploadDir = (dir) => {
   }
 };
 
-const uploadDir = process.env.UPLOAD_DIR || './uploads';
+const uploadDir = process.env.UPLOAD_DIR || "./uploads";
 ensureUploadDir(uploadDir);
 
 const storage = multer.diskStorage({
@@ -25,52 +25,58 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     cb(null, `upload_${uniqueSuffix}${ext}`);
-  }
+  },
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'application/dicom'];
+  console.log("Uploaded file MIME type:", file.mimetype);
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "application/dicom",
+    "application/octet-stream",
+  ];
   if (!allowedTypes.includes(file.mimetype)) {
-    return cb(new Error('Only JPEG, PNG, or DICOM images are allowed'), false);
+    return cb(new Error("Only JPEG, PNG, or DICOM images are allowed"), false);
   }
   cb(null, true);
 };
 
 const limits = {
-  fileSize: parseInt(process.env.MAX_FILE_SIZE_MB || '20') * 1024 * 1024,
-  files: 1
+  fileSize: parseInt(process.env.MAX_FILE_SIZE_MB || "20") * 1024 * 1024,
+  files: 1,
 };
 
 // Option 1: Export the multer instance to use .single() in routes
 export const multerInstance = multer({
   storage,
   fileFilter,
-  limits
+  limits,
 });
 
 // Option 2: Export pre-configured single upload middleware
 export const uploadSingleMammogram = multer({
   storage,
   fileFilter,
-  limits
-}).single('mammogram');
+  limits,
+}).single("mammogram");
 
 // Middleware wrapper for better error handling (use with Option 2)
 export const handleFileUpload = (req, res, next) => {
   uploadSingleMammogram(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({
-        error: 'File upload error',
-        details: err.code === 'LIMIT_FILE_SIZE' 
-          ? 'File too large' 
-          : err.message
+        error: "File upload error",
+        details:
+          err.code === "LIMIT_FILE_SIZE" ? "File too large" : err.message,
       });
     } else if (err) {
       return res.status(500).json({
-        error: 'File upload failed',
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        error: "File upload failed",
+        details:
+          process.env.NODE_ENV === "development" ? err.message : undefined,
       });
     }
     next();
