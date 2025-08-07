@@ -344,8 +344,31 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Log login attempt
+    await logEvent({
+      eventType: "security",
+      action: "login_attempt",
+      status: "success",
+      metadata: {
+        email,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      },
+      req,
+    });
+
     // Validate input
     if (!email || !password) {
+      await logEvent({
+        eventType: "security",
+        action: "login_failed",
+        status: "failure",
+        metadata: {
+          reason: "missing_credentials",
+          fields: { email: !!email, password: !!password },
+        },
+        req,
+      });
       return res.status(400).json({
         success: false,
         message: "Please provide email and password",
@@ -355,10 +378,18 @@ export const loginUser = async (req, res) => {
     // Find user with password field
     const user = await User.findOne({ email }).select("+password");
 
-    console.log("User document from DB:", user);
-    console.log("Active status:", user.active, typeof user.active);
-
     if (!user || !(await user.correctPassword(password, user.password))) {
+      await logEvent({
+        eventType: "security",
+        action: "login_failed",
+        status: "failure",
+        metadata: {
+          reason: "invalid_credentials",
+          email,
+          accountExists: !!user,
+        },
+        req,
+      });
       return res.status(401).json({
         success: false,
         message: "Invalid email or password",
@@ -367,9 +398,15 @@ export const loginUser = async (req, res) => {
 
     // Check if account is active
     if (user.active === false) {
-      console.log("Login blocked - account inactive:", {
-        userId: user._id,
-        dbActiveStatus: user.active,
+      await logSecurityEvent({
+        action: "login_blocked_inactive",
+        user,
+        status: "failure",
+        metadata: {
+          reason: "account_inactive",
+          lastActive: user.lastLogin,
+        },
+        req,
       });
       return res.status(401).json({
         success: false,
@@ -382,6 +419,17 @@ export const loginUser = async (req, res) => {
       ["radiologist", "physician", "technician", "admin"].includes(user.role) &&
       !user.isVerified
     ) {
+      await logSecurityEvent({
+        action: "login_blocked_unverified",
+        user,
+        status: "failure",
+        metadata: {
+          reason: "account_unverified",
+          role: user.role,
+          verificationRequested: !!user.emailVerificationToken,
+        },
+        req,
+      });
       return res.status(401).json({
         success: false,
         message:
@@ -392,12 +440,25 @@ export const loginUser = async (req, res) => {
     // Generate token
     const token = await user.generateAuthToken();
 
-    // IMPORTANT: Save the token to the user's tokens array
+    // Save the token to the user's tokens array
     await user.saveToken(token);
 
     // Update last login
     user.lastLogin = new Date();
     await user.save();
+
+    // Log successful authentication
+    await logSecurityEvent({
+      action: "user_authenticated",
+      user,
+      status: "success",
+      metadata: {
+        authMethod: "password",
+        tokenGenerationTime: new Date(),
+        tokenLength: token.length, // Don't log actual token
+      },
+      req,
+    });
 
     // Prepare user data for response
     const userData = {
@@ -426,6 +487,19 @@ export const loginUser = async (req, res) => {
       sameSite: "strict",
     });
 
+    // Log successful login completion
+    await logEvent({
+      eventType: "security",
+      action: "login_success",
+      user,
+      status: "success",
+      metadata: {
+        sessionDuration: "7 days",
+        cookieSecure: process.env.NODE_ENV === "production",
+      },
+      req,
+    });
+
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -434,6 +508,20 @@ export const loginUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
+
+    // Log login failure
+    await logEvent({
+      eventType: "security",
+      action: "login_error",
+      status: "failure",
+      metadata: {
+        error: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        attemptedEmail: req.body.email,
+      },
+      req,
+    });
+
     res.status(500).json({
       success: false,
       message: "Login failed. Please try again.",
