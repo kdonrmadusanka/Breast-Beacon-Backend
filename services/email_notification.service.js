@@ -283,7 +283,7 @@ async function getNotificationTemplate(type, category, language = "en") {
   return template;
 }
 
-async function sendEmail(email, content) {
+export async function sendEmail(email, content) {
   try {
     const mailOptions = {
       from: `"Mammography Center" <${process.env.EMAIL_FROM}>`,
@@ -363,4 +363,5 @@ export default {
   sendResultsNotification,
   sendWelcomeEmail,
   sendVerificationEmail,
+  sendEmail,
 };

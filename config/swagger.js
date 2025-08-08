@@ -20,7 +20,7 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:5000/api/v1",
+        url: "http://localhost:5001/api/v1",
         description: "Development server",
       },
       {
@@ -245,5 +245,5 @@ export const setupSwagger = (app) => {
       customSiteTitle: "Mammogram API Documentation",
     })
   );
-  console.log(`Swagger docs available at http://localhost:5000/api-docs`);
+  console.log(`Swagger docs available at http://localhost:5001/api-docs`);
 };
