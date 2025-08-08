@@ -99,29 +99,75 @@ const s3Client =
  *                   example: "Failed to upload mammogram"
  */
 export const uploadMammogram = async (req, res) => {
+  let processedFilePath; // Declare here for cleanup in catch block
+
   try {
+    // Log upload attempt
+    await logEvent({
+      eventType: "system",
+      action: "mammogram_upload_started",
+      user: req.user,
+      metadata: {
+        filePresent: !!req.file,
+        patientId: req.body.patientId,
+        ip: req.ip,
+      },
+      req,
+    });
+
     // Validate required fields
     if (!req.file) {
+      await logEvent({
+        eventType: "system",
+        action: "mammogram_upload_failed",
+        user: req.user,
+        status: "failure",
+        metadata: {
+          reason: "no_file_uploaded",
+        },
+        req,
+      });
       return res.status(400).json({ error: "No file uploaded" });
     }
 
     const { patientId, notes, laterality, viewPosition } = req.body;
     if (!patientId) {
+      await logEvent({
+        eventType: "system",
+        action: "mammogram_upload_failed",
+        user: req.user,
+        status: "failure",
+        metadata: {
+          reason: "missing_patient_id",
+        },
+        req,
+      });
       return res.status(400).json({ error: "Patient ID is required" });
     }
 
-    console.log("Uploaded file MIME type:", req.file.mimetype);
+    // Log file details
+    await logEvent({
+      eventType: "system",
+      action: "file_received",
+      user: req.user,
+      metadata: {
+        originalFilename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        sizeBytes: req.file.size,
+        patientId,
+      },
+      req,
+    });
 
-    // Validate file type - include DICOM extensions
+    // Validate file type
     const allowedTypes = [
       "image/jpeg",
       "image/png",
       "image/dicom",
-      "application/octet-stream", // For generic DICOM files
-      "application/dicom", // Alternative DICOM MIME type
+      "application/octet-stream",
+      "application/dicom",
     ];
 
-    // Also check file extension for DICOM
     const fileExtension = path.extname(req.file.originalname).toLowerCase();
     const isDicom =
       req.file.mimetype === "image/dicom" ||
@@ -130,15 +176,39 @@ export const uploadMammogram = async (req, res) => {
       fileExtension === ".dcm";
 
     if (!allowedTypes.includes(req.file.mimetype) && !isDicom) {
+      await logEvent({
+        eventType: "system",
+        action: "mammogram_upload_failed",
+        user: req.user,
+        status: "failure",
+        metadata: {
+          reason: "invalid_file_type",
+          receivedType: req.file.mimetype,
+          allowedTypes,
+        },
+        req,
+      });
       return res.status(400).json({
         error: "Only JPEG, PNG, or DICOM images are allowed",
         receivedType: req.file.mimetype,
       });
     }
 
-    // Validate file size (e.g., 20MB max for DICOM)
+    // Validate file size
     const maxSize = isDicom ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
     if (req.file.size > maxSize) {
+      await logEvent({
+        eventType: "system",
+        action: "mammogram_upload_failed",
+        user: req.user,
+        status: "failure",
+        metadata: {
+          reason: "file_size_exceeded",
+          sizeBytes: req.file.size,
+          maxAllowedBytes: maxSize,
+        },
+        req,
+      });
       return res.status(400).json({
         error: `File size exceeds ${maxSize / (1024 * 1024)}MB limit`,
       });
@@ -169,13 +239,37 @@ export const uploadMammogram = async (req, res) => {
     }
 
     // Process the image based on type
-    let processedFilePath;
     let metadata = {};
 
     if (isDicom) {
-      // Handle DICOM files (regardless of MIME type)
       try {
+        // Log DICOM processing start
+        await logEvent({
+          eventType: "system",
+          action: "dicom_processing_started",
+          user: req.user,
+          metadata: {
+            patientId,
+            originalPath: req.file.path,
+          },
+          req,
+        });
+
         metadata = await mammogramMetadataParser(req.file.path);
+
+        // Log DICOM metadata extraction
+        await logEvent({
+          eventType: "system",
+          action: "dicom_metadata_extracted",
+          user: req.user,
+          metadata: {
+            patientId,
+            dicomFields: Object.keys(metadata).filter(
+              (k) => !k.toLowerCase().includes("patient")
+            ),
+          },
+          req,
+        });
 
         // Anonymize the file
         const anonymizedPath = path.join(
@@ -185,25 +279,75 @@ export const uploadMammogram = async (req, res) => {
         await anonymizeDicomFile(req.file.path, anonymizedPath);
 
         processedFilePath = anonymizedPath;
+
+        // Log successful DICOM processing
+        await logEvent({
+          eventType: "system",
+          action: "dicom_processing_completed",
+          user: req.user,
+          status: "success",
+          metadata: {
+            patientId,
+            anonymizedPath,
+            originalSize: req.file.size,
+            processedSize: fs.statSync(anonymizedPath).size,
+          },
+          req,
+        });
       } catch (dicomError) {
-        console.error("DICOM processing failed:", dicomError);
+        await logEvent({
+          eventType: "system",
+          action: "dicom_processing_failed",
+          user: req.user,
+          status: "failure",
+          metadata: {
+            error: dicomError.message,
+            stack:
+              process.env.NODE_ENV === "development"
+                ? dicomError.stack
+                : undefined,
+          },
+          req,
+        });
         throw new Error("Invalid DICOM file format");
       } finally {
-        // Always clean up original file
         if (fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
         }
       }
     } else {
-      // Process standard images
-      processedFilePath = path.join(localBasePath, sanitizedFilename);
       try {
+        processedFilePath = path.join(localBasePath, sanitizedFilename);
         await sharp(req.file.path)
           .jpeg({ quality: 90, mozjpeg: true })
           .resize(3000, 4000, { fit: "inside", withoutEnlargement: true })
           .toFile(processedFilePath);
+
+        await logEvent({
+          eventType: "system",
+          action: "image_processing_completed",
+          user: req.user,
+          status: "success",
+          metadata: {
+            originalSize: req.file.size,
+            processedSize: fs.statSync(processedFilePath).size,
+            compressionRatio: (
+              req.file.size / fs.statSync(processedFilePath).size
+            ).toFixed(2),
+          },
+          req,
+        });
       } catch (imageError) {
-        console.error("Image processing failed:", imageError);
+        await logEvent({
+          eventType: "system",
+          action: "image_processing_failed",
+          user: req.user,
+          status: "failure",
+          metadata: {
+            error: imageError.message,
+          },
+          req,
+        });
         throw new Error("Invalid image file format");
       } finally {
         if (fs.existsSync(req.file.path)) {
@@ -212,24 +356,64 @@ export const uploadMammogram = async (req, res) => {
       }
     }
 
-    // If using S3, upload to cloud storage
+    // Cloud storage upload
     let storagePath = processedFilePath;
     if (process.env.STORAGE_TYPE === "s3") {
-      const s3Key = `mammograms/${yearMonth}/${patientFolder}/${sanitizedFilename}`;
-      await s3Client.send(
-        new PutObjectCommand({
-          Bucket: process.env.S3_BUCKET_NAME,
-          Key: s3Key,
-          Body: fs.createReadStream(processedFilePath),
-          ContentType: req.file.mimetype,
-          Metadata: metadata,
-        })
-      );
-      storagePath = s3Key;
+      try {
+        const s3Key = `mammograms/${yearMonth}/${patientFolder}/${sanitizedFilename}`;
 
-      // Optionally remove local file after S3 upload
-      if (process.env.CLEAN_LOCAL_UPLOADS === "true") {
-        fs.unlinkSync(processedFilePath);
+        await logEvent({
+          eventType: "system",
+          action: "cloud_upload_started",
+          user: req.user,
+          metadata: {
+            s3Bucket: process.env.S3_BUCKET_NAME,
+            s3Key,
+            localPath: processedFilePath,
+          },
+          req,
+        });
+
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: s3Key,
+            Body: fs.createReadStream(processedFilePath),
+            ContentType: req.file.mimetype,
+            Metadata: metadata,
+          })
+        );
+
+        storagePath = s3Key;
+
+        await logEvent({
+          eventType: "system",
+          action: "cloud_upload_completed",
+          user: req.user,
+          status: "success",
+          metadata: {
+            s3Location: `s3://${process.env.S3_BUCKET_NAME}/${s3Key}`,
+            uploadDuration: `${Date.now() - uploadDate.getTime()}ms`,
+          },
+          req,
+        });
+
+        if (process.env.CLEAN_LOCAL_UPLOADS === "true") {
+          fs.unlinkSync(processedFilePath);
+        }
+      } catch (s3Error) {
+        await logEvent({
+          eventType: "system",
+          action: "cloud_upload_failed",
+          user: req.user,
+          status: "failure",
+          metadata: {
+            error: s3Error.message,
+            s3Bucket: process.env.S3_BUCKET_NAME,
+          },
+          req,
+        });
+        throw new Error("Failed to upload to cloud storage");
       }
     }
 
@@ -249,27 +433,61 @@ export const uploadMammogram = async (req, res) => {
         ...metadata,
       },
       uploadDate,
-      checksum: await calculateFileChecksum(processedFilePath), // For data integrity
+      checksum: await calculateFileChecksum(processedFilePath),
     });
 
     await newMammogram.save();
 
-    // Return enriched response
+    // Log successful mammogram creation
+    await logEvent({
+      eventType: "system",
+      action: "mammogram_record_created",
+      user: req.user,
+      status: "success",
+      metadata: {
+        mammogramId: newMammogram._id,
+        patientId,
+        storageType: newMammogram.storageType,
+        hasMetadata: !!metadata,
+      },
+      req,
+    });
+
+    // Return response
     res.status(201).json({
       success: true,
       mammogram: newMammogram,
-      previewUrl: generatePreviewUrl(newMammogram), // Helper function to generate access URL
+      previewUrl: generatePreviewUrl(newMammogram),
     });
   } catch (err) {
     console.error("Error uploading mammogram:", err);
 
-    // Clean up files if error occurred
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    // Clean up files
+    try {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      if (processedFilePath && fs.existsSync(processedFilePath)) {
+        fs.unlinkSync(processedFilePath);
+      }
+    } catch (cleanupError) {
+      console.error("File cleanup failed:", cleanupError);
     }
-    if (processedFilePath && fs.existsSync(processedFilePath)) {
-      fs.unlinkSync(processedFilePath);
-    }
+
+    // Log the error
+    await logEvent({
+      eventType: "system",
+      action: "mammogram_upload_failed",
+      user: req.user,
+      status: "failure",
+      metadata: {
+        error: err.message,
+        stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+        patientId: req.body.patientId,
+        attemptedFile: req.file?.originalname,
+      },
+      req,
+    });
 
     res.status(500).json({
       error: "Failed to upload mammogram",
