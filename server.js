@@ -8,6 +8,7 @@ import { setupSwagger } from "./config/swagger.js"; // Import Swagger setup
 import mammogramRoutes from "./routes/mammogram.routes.js";
 import authRoutes from "./routes/auth.rotes.js";
 import { setupCronJobs } from "./utils/cronJobs.js";
+import clientIpMiddleware from "./middleware/clientIp.js";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -18,6 +19,7 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: "20mb" })); // Increased limit for file uploads
 app.use(bodyParser.urlencoded({ extended: true, limit: "20mb" }));
+app.use(clientIpMiddleware);
 
 // MongoDB connection
 mongoose
@@ -74,7 +76,7 @@ app.use((req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   if (process.env.NODE_ENV !== "production") {
