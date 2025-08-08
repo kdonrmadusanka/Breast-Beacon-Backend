@@ -93,7 +93,7 @@ export const logEvent = async ({
     // Get client info from request if available
     const clientInfo = req
       ? {
-          ipAddress: req.ip,
+          ipAddress: req.clientIpAddress,
           userAgent: req.headers["user-agent"],
           endpoint: req.originalUrl,
           method: req.method,

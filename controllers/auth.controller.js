@@ -18,7 +18,7 @@ export const registerUser = async (req, res) => {
       metadata: {
         email,
         role,
-        ip: req.ip,
+        ip: req.clientIpAddress,
       },
       req,
     });
@@ -351,7 +351,7 @@ export const loginUser = async (req, res) => {
       status: "success",
       metadata: {
         email,
-        ip: req.ip,
+        ip: req.clientIpAddress,
         userAgent: req.headers["user-agent"],
       },
       req,

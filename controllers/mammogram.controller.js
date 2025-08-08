@@ -110,7 +110,7 @@ export const uploadMammogram = async (req, res) => {
       metadata: {
         filePresent: !!req.file,
         patientId: req.body.patientId,
-        ip: req.ip,
+        ip: req.clientIpAddress,
       },
       req,
     });
