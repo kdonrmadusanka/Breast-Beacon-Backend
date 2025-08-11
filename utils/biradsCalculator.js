@@ -1,5 +1,3 @@
-// utils/biradsCalculator.js
-
 /**
  * @swagger
  * components:

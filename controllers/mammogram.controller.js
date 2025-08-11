@@ -6,6 +6,7 @@ import sharp from "sharp"; // For image processing
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import mammogramMetadataParser from "../utils/mammogram-metadata-parser.js"; // Hypothetical DICOM parser
 import { anonymizeDicomFile } from "../utils/dicomAnonymizer.js";
+import { logEvent } from "../services/auditLogger.js";
 import crypto from "crypto";
 
 // Configure S3 if using cloud storage
