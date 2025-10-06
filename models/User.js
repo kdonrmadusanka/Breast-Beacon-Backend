@@ -2,10 +2,15 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import validator from "validator";
 import jwt from "jsonwebtoken";
-import crypto from "crypto"; // Add this missing import
+import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
+    userId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null values while maintaining uniqueness for non-null values
+    },
     firstName: {
       type: String,
       required: [true, "First name is required"],
@@ -60,7 +65,6 @@ const userSchema = new mongoose.Schema(
       ref: "Institution",
       required: false,
     },
-    // Add tokens array for tracking active sessions
     tokens: [
       {
         token: {
@@ -70,7 +74,7 @@ const userSchema = new mongoose.Schema(
         createdAt: {
           type: Date,
           default: Date.now,
-          expires: "7d", // Auto-delete after 7 days
+          expires: "7d",
         },
       },
     ],
@@ -110,6 +114,21 @@ userSchema.virtual("mammograms", {
   foreignField: "uploadedBy",
 });
 
+// Pre-save hook to generate user ID
+userSchema.pre("save", async function (next) {
+  // Only generate userId for new documents
+  if (this.isNew && !this.userId) {
+    try {
+      this.userId = await generateUserId(this.role);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  } else {
+    next();
+  }
+});
+
 // Pre-save hook to hash password
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
@@ -122,7 +141,7 @@ userSchema.pre("save", async function (next) {
 userSchema.pre("save", function (next) {
   if (!this.isModified("password") || this.isNew) return next();
 
-  this.passwordChangedAt = Date.now() - 1000; // Ensure token is created after
+  this.passwordChangedAt = Date.now() - 1000;
   next();
 });
 
@@ -134,6 +153,7 @@ userSchema.methods.generateAuthToken = function () {
 
   const payload = {
     _id: this._id,
+    userId: this.userId,
     role: this.role,
     email: this.email,
     isVerified: this.isVerified,

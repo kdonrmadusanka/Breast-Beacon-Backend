@@ -1,342 +1,275 @@
-import User from "../models/User.js";
-import crypto from "crypto";
-import jwt from "jsonwebtoken";
+import User from '../models/User.js';
+import crypto from 'crypto';
+import mongoose from 'mongoose';
+import validator from 'validator';
+import jwt from 'jsonwebtoken';
 import {
   sendWelcomeEmail,
   sendVerificationEmail,
-} from "../services/email_notification.service.js";
+} from '../services/email_notification.service.js';
+import Counter from '../models/Counter.js';
 
+// Main registration function
 export const registerUser = async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, role } = req.body;
-
-    // Log registration attempt
-    await logEvent({
-      eventType: "security",
-      action: "user_registration_attempt",
-      status: "success",
-      metadata: {
-        email,
-        role,
-        ip: req.clientIpAddress,
-      },
-      req,
+  // Validate critical dependencies first
+  if (!mongoose.connection.readyState) {
+    return res.status(500).json({
+      success: false,
+      message: 'Database connection not available',
     });
+  }
 
-    // Basic validation
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { firstName, lastName, email, password, role = 'patient' } = req.body;
+
+    // Input validation
     if (!firstName || !lastName || !email || !password) {
-      await logEvent({
-        eventType: "security",
-        action: "user_registration_failed",
-        status: "failure",
-        metadata: {
-          reason: "missing_fields",
-          fields: { firstName, lastName, email, password: !!password },
-        },
-        req,
-      });
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Please provide all required fields",
+        message: 'All required fields must be provided',
+        requiredFields: ['firstName', 'lastName', 'email', 'password'],
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      await logEvent({
-        eventType: "security",
-        action: "user_registration_failed",
-        status: "failure",
-        metadata: {
-          reason: "email_in_use",
-          email,
-        },
-        req,
+    // Sanitize inputs
+    const sanitizedData = {
+      firstName: firstName.toString().trim(),
+      lastName: lastName.toString().trim(),
+      email: email.toString().toLowerCase().trim(),
+      password: password.toString(),
+      role: role.toString(),
+    };
+
+    // Email validation
+    if (!validator.isEmail(sanitizedData.email)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address',
       });
+    }
+
+    // Check for existing user
+    const User = mongoose.model('User');
+    const existingUser = await User.findOne({
+      email: sanitizedData.email,
+    }).session(session);
+    if (existingUser) {
+      await session.abortTransaction();
       return res.status(409).json({
         success: false,
-        message: "Email already in use",
+        message: 'Email address is already registered',
       });
     }
 
-    // Handle medical professional specific fields
-    const isMedicalProfessional = [
-      "radiologist",
-      "physician",
-      "technician",
-      "admin",
-    ].includes(role);
+    // Handle medical professional fields
     const medicalFields = {};
+    const MEDICAL_ROLES = ['radiologist', 'physician', 'technician', 'admin'];
+    const isMedicalProfessional = MEDICAL_ROLES.includes(sanitizedData.role);
 
     if (isMedicalProfessional) {
       const { licenseNumber, specialization, institution } = req.body;
 
       if (!licenseNumber || !specialization || !institution) {
-        await logEvent({
-          eventType: "security",
-          action: "medical_registration_failed",
-          status: "failure",
-          metadata: {
-            reason: "missing_medical_fields",
-            fields: { licenseNumber, specialization, institution },
-          },
-          req,
-        });
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message:
-            "Medical professionals must provide license number, specialization, and institution",
+            'Medical professionals must provide license number, specialization, and institution',
         });
       }
 
-      medicalFields.licenseNumber = licenseNumber;
-      medicalFields.specialization = specialization;
-      medicalFields.institution = institution;
+      Object.assign(medicalFields, {
+        licenseNumber: licenseNumber.toString().trim(),
+        specialization: specialization.toString().trim(),
+        institution: institution.toString().trim(),
+      });
     }
 
-    // Create new user
-    const newUser = await User.create({
-      firstName,
-      lastName,
-      email,
-      password,
-      role: role || "patient",
-      ...medicalFields,
-      isVerified: role === "patient", // Auto-verify patients
-    });
-
-    newUser.active = true;
-
-    // Log user creation
-    await logEvent({
-      eventType: "security",
-      action: "user_created",
-      status: "success",
-      userId: newUser._id,
-      userRole: newUser.role,
-      metadata: {
-        isVerified: newUser.isVerified,
-        isMedicalProfessional,
-      },
-      req,
-    });
-
-    // If the user is a patient, create a patient record with generated ID
-    if (newUser.role === "patient") {
-      const patientId = await generatePatientId();
-
-      // Extract patient-specific fields from request body
-      const { dateOfBirth, gender, phoneNumber, address } = req.body;
-
-      await Patient.create({
-        user: newUser._id,
-        patientId,
-        dateOfBirth,
-        gender,
-        phoneNumber,
-        address,
-      });
-
-      // Log patient record creation
-      await logEvent({
-        eventType: "system",
-        action: "patient_record_created",
-        status: "success",
-        userId: newUser._id,
-        metadata: {
-          patientId,
-          hasDemographics: !!(dateOfBirth && gender),
+    // Create user
+    const newUser = await User.create(
+      [
+        {
+          firstName: sanitizedData.firstName,
+          lastName: sanitizedData.lastName,
+          email: sanitizedData.email,
+          password: sanitizedData.password,
+          role: sanitizedData.role,
+          ...medicalFields,
+          isVerified: sanitizedData.role === 'patient',
+          active: true,
         },
-        req,
-      });
+      ],
+      { session },
+    );
+
+    const user = newUser[0];
+
+    // Handle patient-specific creation
+    if (sanitizedData.role === 'patient') {
+      try {
+        const Patient = mongoose.model('Patient');
+        const patientId = await generatePatientId();
+        const { dateOfBirth, gender, phoneNumber, address } = req.body;
+
+        await Patient.create(
+          [
+            {
+              user: user._id,
+              patientId,
+              dateOfBirth: dateOfBirth || null,
+              gender: gender || null,
+              phoneNumber: phoneNumber || null,
+              address: address || null,
+            },
+          ],
+          { session },
+        );
+      } catch (patientError) {
+        console.error('Patient record creation failed:', patientError.message);
+        // Continue with user creation even if patient record fails
+      }
     }
 
-    // Generate JWT token
-    const token = newUser.generateAuthToken();
+    // Generate auth token
+    const token = user.generateAuthToken();
+    await user.saveToken(token);
 
-    // Save the token to the user's tokens array
-    await newUser.saveToken(token);
-
-    // Log token generation
-    await logEvent({
-      eventType: "security",
-      action: "auth_token_generated",
-      status: "success",
-      userId: newUser._id,
-      metadata: {
-        tokenType: "jwt",
-        tokenLength: token.length, // Don't log actual token
-      },
-      req,
-    });
-
-    // Prepare user data for response (without password)
+    // Prepare response data
     const userData = {
-      _id: newUser._id,
-      firstName: newUser.firstName,
-      lastName: newUser.lastName,
-      email: newUser.email,
-      role: newUser.role,
-      isVerified: newUser.isVerified,
-      createdAt: newUser.createdAt,
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt,
     };
 
-    // Add medical fields to response if applicable
     if (isMedicalProfessional) {
-      userData.specialization = newUser.specialization;
-      userData.institution = newUser.institution;
+      userData.specialization = user.specialization;
+      userData.institution = user.institution;
     }
 
-    // Send appropriate email based on user type
-    if (newUser.role === "patient") {
-      try {
-        await sendWelcomeEmail({
-          email: newUser.email,
-          name: `${newUser.firstName} ${newUser.lastName}`,
-          role: "patient",
-        });
-        await logEvent({
-          eventType: "system",
-          action: "welcome_email_sent",
-          status: "success",
-          userId: newUser._id,
-          metadata: {
-            emailType: "welcome",
-            recipient: newUser.email,
-          },
-          req,
-        });
-      } catch (emailError) {
-        await logEvent({
-          eventType: "system",
-          action: "welcome_email_failed",
-          status: "failure",
-          userId: newUser._id,
-          metadata: {
-            error: emailError.message,
-            recipient: newUser.email,
-          },
-          req,
-        });
-      }
+    // Handle emails (non-blocking)
+    if (sanitizedData.role === 'patient') {
+      sendEmailSafely(
+        sendWelcomeEmail,
+        {
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`,
+          role: 'patient',
+        },
+        'Welcome',
+      );
     } else {
-      // Create verification token for medical professionals
-      const verificationToken = crypto.randomBytes(32).toString("hex");
-      newUser.emailVerificationToken = crypto
-        .createHash("sha256")
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      user.emailVerificationToken = crypto
+        .createHash('sha256')
         .update(verificationToken)
-        .digest("hex");
-      await newUser.save();
+        .digest('hex');
 
-      try {
-        await sendVerificationEmail({
-          email: newUser.email,
-          name: `${newUser.firstName} ${newUser.lastName}`,
+      await user.save({ session });
+
+      sendEmailSafely(
+        sendVerificationEmail,
+        {
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`,
           verificationToken,
-          role: newUser.role,
-        });
-        await logEvent({
-          eventType: "security",
-          action: "verification_email_sent",
-          status: "success",
-          userId: newUser._id,
-          metadata: {
-            emailType: "verification",
-            recipient: newUser.email,
-            verificationTokenLength: verificationToken.length, // Don't log actual token
-          },
-          req,
-        });
-      } catch (emailError) {
-        await logEvent({
-          eventType: "security",
-          action: "verification_email_failed",
-          status: "failure",
-          userId: newUser._id,
-          metadata: {
-            error: emailError.message,
-            recipient: newUser.email,
-          },
-          req,
-        });
-      }
+          role: user.role,
+        },
+        'Verification',
+      );
     }
 
-    // Set secure HTTP-only cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-      sameSite: "strict",
-    });
+    // Commit transaction
+    await session.commitTransaction();
 
-    // Log successful registration completion
-    await logEvent({
-      eventType: "security",
-      action: "user_registration_completed",
-      status: "success",
-      userId: newUser._id,
-      userRole: newUser.role,
-      metadata: {
-        registrationMethod: "standard",
-        verificationStatus: newUser.isVerified,
-      },
-      req,
+    // Set HTTP-only cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: 'strict',
+      path: '/',
     });
 
     return res.status(201).json({
       success: true,
       message:
-        newUser.role === "patient"
-          ? "Patient registration successful!"
-          : "Registration submitted! Please check your email to verify your account.",
+        sanitizedData.role === 'patient'
+          ? 'Patient registration completed successfully!'
+          : 'Registration submitted! Please check your email for verification.',
       data: userData,
-      token: token, // Include the token in the response
+      token: token,
     });
   } catch (error) {
-    console.error("Registration error:", error);
+    await session.abortTransaction();
 
-    // Log registration failure
-    await logEvent({
-      eventType: "security",
-      action: "user_registration_failed",
-      status: "failure",
-      metadata: {
-        error: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-        requestBody: {
-          email: req.body.email,
-          role: req.body.role,
-        },
-      },
-      req,
-    });
+    console.error('Registration process error:', error);
 
-    return res.status(500).json({
+    // User-friendly error messages
+    let statusCode = 500;
+    let message = 'Registration failed due to system error';
+
+    if (error.name === 'ValidationError') {
+      statusCode = 400;
+      message = 'Invalid input data provided';
+    } else if (error.code === 11000) {
+      statusCode = 409;
+      message = 'Email address already exists';
+    } else if (error.name === 'CastError') {
+      statusCode = 400;
+      message = 'Invalid data format';
+    }
+
+    return res.status(statusCode).json({
       success: false,
-      message: "Registration failed. Please try again.",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      message: message,
+      ...(process.env.NODE_ENV === 'development' && {
+        error: error.message,
+        stack: error.stack,
+      }),
     });
+  } finally {
+    session.endSession();
   }
 };
 
-// Helper function to generate patient ID
+// Helper function to safely require/generate patient ID
 const generatePatientId = async () => {
   try {
-    // Find and increment the patient counter
+    // Make sure Counter model is properly imported
+    const Counter = mongoose.model('Counter');
     const counter = await Counter.findOneAndUpdate(
-      { name: "patientId" },
+      { name: 'patientId' },
       { $inc: { value: 1 } },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
-
-    // Format the ID with leading zeros
-    const paddedNumber = String(counter.value).padStart(4, "0");
-    return `P-${paddedNumber}`;
+    return `P-${String(counter.value).padStart(4, '0')}`;
   } catch (error) {
-    console.error("Error generating patient ID:", error);
-    throw new Error("Failed to generate patient ID");
+    console.error(
+      'Patient ID generation failed, using fallback:',
+      error.message,
+    );
+    // Fallback: timestamp-based ID
+    return `P-${Date.now().toString().slice(-6)}`;
+  }
+};
+
+const sendEmailSafely = async (emailFunction, emailData, errorContext) => {
+  try {
+    await emailFunction(emailData);
+    console.log(`${errorContext} email sent successfully`);
+    return true;
+  } catch (emailError) {
+    console.warn(`${errorContext} email failed:`, emailError.message);
+    return false;
   }
 };
 
@@ -344,96 +277,41 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Log login attempt
-    await logEvent({
-      eventType: "security",
-      action: "login_attempt",
-      status: "success",
-      metadata: {
-        email,
-        ip: req.clientIpAddress,
-        userAgent: req.headers["user-agent"],
-      },
-      req,
-    });
-
     // Validate input
     if (!email || !password) {
-      await logEvent({
-        eventType: "security",
-        action: "login_failed",
-        status: "failure",
-        metadata: {
-          reason: "missing_credentials",
-          fields: { email: !!email, password: !!password },
-        },
-        req,
-      });
       return res.status(400).json({
         success: false,
-        message: "Please provide email and password",
+        message: 'Please provide email and password',
       });
     }
 
     // Find user with password field
-    const user = await User.findOne({ email }).select("+password");
+    const user = await User.findOne({ email }).select('+password');
 
     if (!user || !(await user.correctPassword(password, user.password))) {
-      await logEvent({
-        eventType: "security",
-        action: "login_failed",
-        status: "failure",
-        metadata: {
-          reason: "invalid_credentials",
-          email,
-          accountExists: !!user,
-        },
-        req,
-      });
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: 'Invalid email or password',
       });
     }
 
     // Check if account is active
     if (user.active === false) {
-      await logSecurityEvent({
-        action: "login_blocked_inactive",
-        user,
-        status: "failure",
-        metadata: {
-          reason: "account_inactive",
-          lastActive: user.lastLogin,
-        },
-        req,
-      });
       return res.status(401).json({
         success: false,
-        message: "Account has been deactivated",
+        message: 'Account has been deactivated',
       });
     }
 
     // Check verification for medical professionals
     if (
-      ["radiologist", "physician", "technician", "admin"].includes(user.role) &&
+      ['radiologist', 'physician', 'technician', 'admin'].includes(user.role) &&
       !user.isVerified
     ) {
-      await logSecurityEvent({
-        action: "login_blocked_unverified",
-        user,
-        status: "failure",
-        metadata: {
-          reason: "account_unverified",
-          role: user.role,
-          verificationRequested: !!user.emailVerificationToken,
-        },
-        req,
-      });
       return res.status(401).json({
         success: false,
         message:
-          "Account not verified. Please check your email for verification instructions.",
+          'Account not verified. Please check your email for verification instructions.',
       });
     }
 
@@ -446,19 +324,6 @@ export const loginUser = async (req, res) => {
     // Update last login
     user.lastLogin = new Date();
     await user.save();
-
-    // Log successful authentication
-    await logSecurityEvent({
-      action: "user_authenticated",
-      user,
-      status: "success",
-      metadata: {
-        authMethod: "password",
-        tokenGenerationTime: new Date(),
-        tokenLength: token.length, // Don't log actual token
-      },
-      req,
-    });
 
     // Prepare user data for response
     const userData = {
@@ -473,59 +338,33 @@ export const loginUser = async (req, res) => {
 
     // Add medical fields if applicable
     if (
-      ["radiologist", "physician", "technician", "admin"].includes(user.role)
+      ['radiologist', 'physician', 'technician', 'admin'].includes(user.role)
     ) {
       userData.specialization = user.specialization;
       userData.institution = user.institution;
     }
 
     // Set secure HTTP-only cookie
-    res.cookie("token", token, {
+    res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: "strict",
-    });
-
-    // Log successful login completion
-    await logEvent({
-      eventType: "security",
-      action: "login_success",
-      user,
-      status: "success",
-      metadata: {
-        sessionDuration: "7 days",
-        cookieSecure: process.env.NODE_ENV === "production",
-      },
-      req,
+      sameSite: 'strict',
     });
 
     res.status(200).json({
       success: true,
-      message: "Login successful",
+      message: 'Login successful',
       data: userData,
       token, // Also return token for API clients
     });
   } catch (error) {
-    console.error("Login error:", error);
-
-    // Log login failure
-    await logEvent({
-      eventType: "security",
-      action: "login_error",
-      status: "failure",
-      metadata: {
-        error: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-        attemptedEmail: req.body.email,
-      },
-      req,
-    });
+    console.error('Login error:', error);
 
     res.status(500).json({
       success: false,
-      message: "Login failed. Please try again.",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      message: 'Login failed. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
