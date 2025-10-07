@@ -1,15 +1,9 @@
-import User from '../models/User.js';
-import crypto from 'crypto';
 import mongoose from 'mongoose';
 import validator from 'validator';
-import jwt from 'jsonwebtoken';
-import {
-  sendWelcomeEmail,
-  sendVerificationEmail,
-} from '../services/email_notification.service.js';
-import Counter from '../models/Counter.js';
+import User from '../models/User.js';
+import Patient from '../models/Patient.js';
+import { sendWelcomeEmail } from '../utils/emailService.js';
 
-// Main registration function
 export const registerUser = async (req, res) => {
   // Validate critical dependencies first
   if (!mongoose.connection.readyState) {
@@ -53,11 +47,21 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    // Password strength validation
+    if (password.length < 8) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long',
+      });
+    }
+
     // Check for existing user
     const User = mongoose.model('User');
     const existingUser = await User.findOne({
       email: sanitizedData.email,
     }).session(session);
+
     if (existingUser) {
       await session.abortTransaction();
       return res.status(409).json({
@@ -74,19 +78,19 @@ export const registerUser = async (req, res) => {
     if (isMedicalProfessional) {
       const { licenseNumber, specialization, institution } = req.body;
 
-      if (!licenseNumber || !specialization || !institution) {
+      if (!licenseNumber || !specialization) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message:
-            'Medical professionals must provide license number, specialization, and institution',
+            'Medical professionals must provide license number and specialization',
         });
       }
 
       Object.assign(medicalFields, {
         licenseNumber: licenseNumber.toString().trim(),
         specialization: specialization.toString().trim(),
-        institution: institution.toString().trim(),
+        ...(institution && { institution: institution.toString().trim() }),
       });
     }
 
@@ -100,6 +104,7 @@ export const registerUser = async (req, res) => {
           password: sanitizedData.password,
           role: sanitizedData.role,
           ...medicalFields,
+          // Patients are auto-verified, medical professionals need email verification
           isVerified: sanitizedData.role === 'patient',
           active: true,
         },
@@ -113,14 +118,12 @@ export const registerUser = async (req, res) => {
     if (sanitizedData.role === 'patient') {
       try {
         const Patient = mongoose.model('Patient');
-        const patientId = await generatePatientId();
         const { dateOfBirth, gender, phoneNumber, address } = req.body;
 
         await Patient.create(
           [
             {
               user: user._id,
-              patientId,
               dateOfBirth: dateOfBirth || null,
               gender: gender || null,
               phoneNumber: phoneNumber || null,
@@ -135,13 +138,20 @@ export const registerUser = async (req, res) => {
       }
     }
 
-    // Generate auth token
-    const token = user.generateAuthToken();
-    await user.saveToken(token);
+    // Generate and save auth token using named token system
+    const authToken = await user.generateAndSaveAuthToken();
+
+    // Generate email verification token for non-patient roles
+    let emailVerificationToken = null;
+    if (sanitizedData.role !== 'patient') {
+      emailVerificationToken =
+        await user.generateAndSaveEmailVerificationToken();
+    }
 
     // Prepare response data
     const userData = {
       _id: user._id,
+      userId: user.userId,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
@@ -152,61 +162,54 @@ export const registerUser = async (req, res) => {
 
     if (isMedicalProfessional) {
       userData.specialization = user.specialization;
-      userData.institution = user.institution;
+      userData.licenseNumber = user.licenseNumber;
+      if (user.institution) {
+        userData.institution = user.institution;
+      }
     }
 
-    // Handle emails (non-blocking)
-    if (sanitizedData.role === 'patient') {
-      sendEmailSafely(
-        sendWelcomeEmail,
-        {
-          email: user.email,
-          name: `${user.firstName} ${user.lastName}`,
-          role: 'patient',
-        },
-        'Welcome',
-      );
-    } else {
-      const verificationToken = crypto.randomBytes(32).toString('hex');
-      user.emailVerificationToken = crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex');
-
-      await user.save({ session });
-
-      sendEmailSafely(
-        sendVerificationEmail,
-        {
-          email: user.email,
-          name: `${user.firstName} ${user.lastName}`,
-          verificationToken,
-          role: user.role,
-        },
-        'Verification',
-      );
+    // Send emails based on role
+    try {
+      if (sanitizedData.role === 'patient') {
+        // Patients get welcome email (no verification needed)
+        await sendWelcomeEmail(user, 'patient_welcome_token_placeholder');
+      } else {
+        // Medical professionals get welcome email with verification link
+        await sendWelcomeEmail(user, emailVerificationToken);
+      }
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError.message);
+      // Don't fail registration if email fails
     }
 
     // Commit transaction
     await session.commitTransaction();
 
     // Set HTTP-only cookie
-    res.cookie('token', token, {
+    res.cookie('token', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       sameSite: 'strict',
       path: '/',
     });
 
+    // Prepare success response
+    let successMessage = '';
+    if (sanitizedData.role === 'patient') {
+      successMessage =
+        'Patient registration completed successfully! You can now access your account.';
+    } else {
+      successMessage =
+        'Registration submitted successfully! Please check your email to verify your account before logging in.';
+    }
+
     return res.status(201).json({
       success: true,
-      message:
-        sanitizedData.role === 'patient'
-          ? 'Patient registration completed successfully!'
-          : 'Registration submitted! Please check your email for verification.',
+      message: successMessage,
       data: userData,
-      token: token,
+      requiresVerification: sanitizedData.role !== 'patient',
+      token: authToken, // Still return token for mobile apps, but cookie for web
     });
   } catch (error) {
     await session.abortTransaction();
@@ -220,12 +223,32 @@ export const registerUser = async (req, res) => {
     if (error.name === 'ValidationError') {
       statusCode = 400;
       message = 'Invalid input data provided';
+
+      // Extract validation errors
+      const validationErrors = {};
+      if (error.errors) {
+        Object.keys(error.errors).forEach((field) => {
+          validationErrors[field] = error.errors[field].message;
+        });
+      }
+
+      return res.status(statusCode).json({
+        success: false,
+        message: message,
+        errors: validationErrors,
+      });
     } else if (error.code === 11000) {
       statusCode = 409;
       message = 'Email address already exists';
     } else if (error.name === 'CastError') {
       statusCode = 400;
       message = 'Invalid data format';
+    } else if (
+      error.message.includes('JWT_SECRET') ||
+      error.message.includes('JWT_EMAIL_SECRET')
+    ) {
+      statusCode = 500;
+      message = 'Server configuration error - please contact support';
     }
 
     return res.status(statusCode).json({
@@ -233,138 +256,9 @@ export const registerUser = async (req, res) => {
       message: message,
       ...(process.env.NODE_ENV === 'development' && {
         error: error.message,
-        stack: error.stack,
       }),
     });
   } finally {
     session.endSession();
-  }
-};
-
-// Helper function to safely require/generate patient ID
-const generatePatientId = async () => {
-  try {
-    // Make sure Counter model is properly imported
-    const Counter = mongoose.model('Counter');
-    const counter = await Counter.findOneAndUpdate(
-      { name: 'patientId' },
-      { $inc: { value: 1 } },
-      { new: true, upsert: true },
-    );
-    return `P-${String(counter.value).padStart(4, '0')}`;
-  } catch (error) {
-    console.error(
-      'Patient ID generation failed, using fallback:',
-      error.message,
-    );
-    // Fallback: timestamp-based ID
-    return `P-${Date.now().toString().slice(-6)}`;
-  }
-};
-
-const sendEmailSafely = async (emailFunction, emailData, errorContext) => {
-  try {
-    await emailFunction(emailData);
-    console.log(`${errorContext} email sent successfully`);
-    return true;
-  } catch (emailError) {
-    console.warn(`${errorContext} email failed:`, emailError.message);
-    return false;
-  }
-};
-
-export const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password',
-      });
-    }
-
-    // Find user with password field
-    const user = await User.findOne({ email }).select('+password');
-
-    if (!user || !(await user.correctPassword(password, user.password))) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password',
-      });
-    }
-
-    // Check if account is active
-    if (user.active === false) {
-      return res.status(401).json({
-        success: false,
-        message: 'Account has been deactivated',
-      });
-    }
-
-    // Check verification for medical professionals
-    if (
-      ['radiologist', 'physician', 'technician', 'admin'].includes(user.role) &&
-      !user.isVerified
-    ) {
-      return res.status(401).json({
-        success: false,
-        message:
-          'Account not verified. Please check your email for verification instructions.',
-      });
-    }
-
-    // Generate token
-    const token = await user.generateAuthToken();
-
-    // Save the token to the user's tokens array
-    await user.saveToken(token);
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Prepare user data for response
-    const userData = {
-      _id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      lastLogin: user.lastLogin,
-    };
-
-    // Add medical fields if applicable
-    if (
-      ['radiologist', 'physician', 'technician', 'admin'].includes(user.role)
-    ) {
-      userData.specialization = user.specialization;
-      userData.institution = user.institution;
-    }
-
-    // Set secure HTTP-only cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'strict',
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: userData,
-      token, // Also return token for API clients
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-
-    res.status(500).json({
-      success: false,
-      message: 'Login failed. Please try again.',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    });
   }
 };

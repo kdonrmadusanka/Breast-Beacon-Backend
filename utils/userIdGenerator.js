@@ -1,4 +1,4 @@
-import Counter from '../models/counter.model.js';
+import Counter from '../models/Counter.js';
 
 /**
  * Generate a unique user ID based on role
