@@ -146,6 +146,8 @@ export const registerUser = async (req, res) => {
     if (sanitizedData.role !== 'patient') {
       emailVerificationToken =
         await user.generateAndSaveEmailVerificationToken();
+      // Add this line to save the user with the new token
+      await user.save({ session });
     }
 
     // Prepare response data

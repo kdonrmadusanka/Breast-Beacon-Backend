@@ -3,11 +3,23 @@ import nodemailer from 'nodemailer';
 // Create transporter
 const createTransporter = () => {
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // Use TLS
+    requireTLS: true, // Force TLS
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD,
     },
+    connectionTimeout: 30000, // 30 seconds
+    socketTimeout: 30000, // 30 seconds
+    greetingTimeout: 15000, // 15 seconds
+    tls: {
+      rejectUnauthorized: false, // Important for some networks
+      ciphers: 'SSLv3',
+    },
+    debug: true, // This will show detailed connection logs
+    logger: true, // This will log the communication
   });
 };
 
