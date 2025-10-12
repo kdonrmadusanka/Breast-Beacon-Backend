@@ -72,7 +72,7 @@ export const registerUser = async (req, res) => {
 
     // Handle medical professional fields
     const medicalFields = {};
-    const MEDICAL_ROLES = ['radiologist', 'physician', 'technician', 'admin'];
+    const MEDICAL_ROLES = ['radiologist', 'physician', 'technician'];
     const isMedicalProfessional = MEDICAL_ROLES.includes(sanitizedData.role);
 
     if (isMedicalProfessional) {
@@ -135,6 +135,27 @@ export const registerUser = async (req, res) => {
       } catch (patientError) {
         console.error('Patient record creation failed:', patientError.message);
         // Continue with user creation even if patient record fails
+      }
+    }
+
+    // Handle admin-specific creation
+    if (sanitizedData.role === 'admin') {
+      try {
+        const Admin = mongoose.model('admin');
+        const { adminId } = req.body;
+
+        await Admin.create(
+          [
+            {
+              user: user._id,
+              adminId: user.adminId,
+            },
+          ],
+          { session },
+        );
+      } catch (adminError) {
+        console.error('Patient record creation failed:', adminError.message);
+        // Continue with user creation even if admin record fails
       }
     }
 
