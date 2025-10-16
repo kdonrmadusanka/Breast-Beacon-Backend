@@ -5,6 +5,6 @@ const adminSchema = new mongoose.Schema({
   adminId: String,
 });
 
-const Patient = mongoose.model('Patient', patientSchema);
+const Admin = mongoose.model('Admin', adminSchema);
 
-export default Patient;
+export default Admin;

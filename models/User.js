@@ -56,7 +56,7 @@ const userSchema = new mongoose.Schema(
       },
     },
     institution: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: 'Institution',
       required: false,
     },
