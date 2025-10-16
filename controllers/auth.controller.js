@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import validator from 'validator';
 import User from '../models/User.js';
 import Patient from '../models/Patient.js';
+import Admin from '../models/Admin.js';
 import { sendWelcomeEmail } from '../utils/emailService.js';
 
 export const registerUser = async (req, res) => {
@@ -141,14 +142,14 @@ export const registerUser = async (req, res) => {
     // Handle admin-specific creation
     if (sanitizedData.role === 'admin') {
       try {
-        const Admin = mongoose.model('admin');
+        const Admin = mongoose.model('Admin');
         const { adminId } = req.body;
 
         await Admin.create(
           [
             {
               user: user._id,
-              adminId: user.adminId,
+              adminId: adminId,
             },
           ],
           { session },
