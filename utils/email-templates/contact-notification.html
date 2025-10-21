@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Contact Form Submission - BreastBeacon</title>
+    <!--[if mso]>
+      <style type="text/css">
+        body,
+        table,
+        td,
+        th,
+        div,
+        p,
+        a {
+          font-family: Arial, sans-serif !important;
+        }
+      </style>
+    <![endif]-->
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f8fafc;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #374151;
+    "
+  >
+    <!--[if mso]>
+    <div style="background-color: #f8fafc; padding: 20px;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td>
+    <![endif]-->
+
+    <div
+      style="
+        max-width: 600px;
+        margin: 20px auto;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+      "
+    >
+      <!-- Header -->
+      <div
+        style="
+          background: #7c3aed;
+          color: white;
+          padding: 30px 20px;
+          text-align: center;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center">
+              <div
+                style="
+                  display: inline-block;
+                  background: rgba(255, 255, 255, 0.2);
+                  padding: 12px;
+                  border-radius: 8px;
+                  margin-bottom: 15px;
+                "
+              >
+                <!-- Medical icon as text/emoji for better compatibility -->
+                <span style="color: white; font-size: 20px">🏥</span>
+              </div>
+              <h1
+                style="
+                  font-size: 24px;
+                  font-weight: bold;
+                  margin: 0 0 8px 0;
+                  color: white;
+                "
+              >
+                BreastBeacon
+              </h1>
+              <p style="font-size: 16px; margin: 0; opacity: 0.9">
+                New Contact Form Submission
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Alert Section -->
+      <div
+        style="
+          background: #fef3f3;
+          border: 1px solid #fecaca;
+          padding: 20px;
+          margin: 20px;
+          border-radius: 8px;
+          border-left: 4px solid #dc2626;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding-bottom: 15px">
+              <span
+                style="
+                  background: #dc2626;
+                  color: white;
+                  padding: 10px;
+                  border-radius: 50%;
+                  display: inline-block;
+                "
+                >⚠️</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td align="center">
+              <h3 style="margin: 0 0 8px 0; color: #dc2626; font-size: 18px">
+                New Contact Message Requires Attention
+              </h3>
+              <p style="margin: 0; color: #b91c1c; font-size: 14px">
+                A user has submitted a contact form and is awaiting response
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Contact Card -->
+      <div
+        style="
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          padding: 20px;
+          margin: 20px;
+          border-radius: 8px;
+          border-left: 4px solid #3b82f6;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-bottom: 15px">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td
+                    style="
+                      background: #3b82f6;
+                      color: white;
+                      width: 40px;
+                      height: 40px;
+                      border-radius: 6px;
+                      text-align: center;
+                      font-weight: bold;
+                      font-size: 16px;
+                    "
+                  >
+                    {{firstName | slice:0:1}}{{lastName | slice:0:1}}
+                  </td>
+                  <td style="padding-left: 12px">
+                    <h3
+                      style="margin: 0 0 4px 0; color: #1e293b; font-size: 18px"
+                    >
+                      {{firstName}} {{lastName}}
+                    </h3>
+                    <span
+                      style="
+                        background: #10b981;
+                        color: white;
+                        padding: 4px 8px;
+                        border-radius: 12px;
+                        font-size: 11px;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                      "
+                      >{{role}}</span
+                    >
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <table
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="border-collapse: collapse"
+              >
+                <tr>
+                  <td width="50%" style="padding: 8px 0">
+                    <div
+                      style="
+                        font-size: 11px;
+                        color: #64748b;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                      "
+                    >
+                      Email Address
+                    </div>
+                    <div
+                      style="font-size: 14px; color: #1e293b; font-weight: 600"
+                    >
+                      {{email}}
+                    </div>
+                  </td>
+                  <td width="50%" style="padding: 8px 0">
+                    <div
+                      style="
+                        font-size: 11px;
+                        color: #64748b;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                      "
+                    >
+                      Institution
+                    </div>
+                    <div
+                      style="font-size: 14px; color: #1e293b; font-weight: 600"
+                    >
+                      {{institution || 'Not specified'}}
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding: 8px 0">
+                    <div
+                      style="
+                        font-size: 11px;
+                        color: #64748b;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                      "
+                    >
+                      User Type
+                    </div>
+                    <div
+                      style="
+                        font-size: 14px;
+                        color: #1e293b;
+                        font-weight: 600;
+                        text-transform: capitalize;
+                      "
+                    >
+                      {{role}}
+                    </div>
+                  </td>
+                  <td width="50%" style="padding: 8px 0">
+                    <div
+                      style="
+                        font-size: 11px;
+                        color: #64748b;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                      "
+                    >
+                      Status
+                    </div>
+                    <div
+                      style="font-size: 14px; color: #1e293b; font-weight: 600"
+                    >
+                      Awaiting Response
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Message Card -->
+      <div
+        style="
+          background: #faf5ff;
+          border: 1px solid #e9d5ff;
+          padding: 20px;
+          margin: 20px;
+          border-radius: 8px;
+          border-left: 4px solid #7c3aed;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-bottom: 15px">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td
+                    style="
+                      background: #7c3aed;
+                      color: white;
+                      width: 24px;
+                      height: 24px;
+                      border-radius: 4px;
+                      text-align: center;
+                      font-size: 12px;
+                    "
+                  >
+                    💬
+                  </td>
+                  <td style="padding-left: 8px">
+                    <h3 style="margin: 0; color: #7c3aed; font-size: 16px">
+                      Message Content
+                    </h3>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div
+                style="
+                  background: white;
+                  padding: 15px;
+                  border-radius: 6px;
+                  border: 1px solid #e2e8f0;
+                  font-style: italic;
+                  line-height: 1.6;
+                  color: #475569;
+                  font-size: 14px;
+                "
+              >
+                {{message}}
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Timestamp -->
+      <div
+        style="
+          background: #fef3c7;
+          border: 1px solid #fcd34d;
+          padding: 15px;
+          margin: 20px;
+          border-radius: 6px;
+          text-align: center;
+        "
+      >
+        <p style="margin: 0; color: #92400e; font-size: 13px; font-weight: 600">
+          🕒 Submitted: {{submittedAt}}
+        </p>
+      </div>
+
+      <!-- Button -->
+      <div style="text-align: center; margin: 30px 20px">
+        <a
+          href="{{adminUrl}}"
+          style="
+            display: inline-block;
+            background: #7c3aed;
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            text-align: center;
+          "
+        >
+          🎯 View in Admin Dashboard
+        </a>
+      </div>
+
+      <!-- Action Steps -->
+      <div
+        style="
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          padding: 20px;
+          margin: 20px;
+          border-radius: 8px;
+          border-left: 4px solid #10b981;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-bottom: 15px">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td
+                    style="
+                      background: #10b981;
+                      color: white;
+                      width: 24px;
+                      height: 24px;
+                      border-radius: 4px;
+                      text-align: center;
+                      font-size: 12px;
+                    "
+                  >
+                    📋
+                  </td>
+                  <td style="padding-left: 8px">
+                    <h3 style="margin: 0; color: #059669; font-size: 16px">
+                      Recommended Actions
+                    </h3>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #10b981;
+                            color: white;
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 50%;
+                            text-align: center;
+                            font-size: 10px;
+                            font-weight: bold;
+                          "
+                        >
+                          1
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Review message details
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #10b981;
+                            color: white;
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 50%;
+                            text-align: center;
+                            font-size: 10px;
+                            font-weight: bold;
+                          "
+                        >
+                          2
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Assign to team member
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #10b981;
+                            color: white;
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 50%;
+                            text-align: center;
+                            font-size: 10px;
+                            font-weight: bold;
+                          "
+                        >
+                          3
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Respond within 24-48h
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #10b981;
+                            color: white;
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 50%;
+                            text-align: center;
+                            font-size: 10px;
+                            font-weight: bold;
+                          "
+                        >
+                          4
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Update contact status
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Notification Note -->
+      <div
+        style="
+          background: #f8fafc;
+          border: 1px dashed #cbd5e1;
+          padding: 15px;
+          margin: 20px;
+          border-radius: 6px;
+          text-align: center;
+        "
+      >
+        <p style="margin: 0; color: #64748b; font-size: 12px; line-height: 1.5">
+          <strong>Team Coordination:</strong> This notification was sent to all
+          platform administrators.<br />
+          Only one team member should respond to avoid duplicate communications.
+        </p>
+      </div>
+
+      <!-- Signature -->
+      <div style="padding: 20px; margin: 20px; border-top: 1px solid #e5e7eb">
+        <p
+          style="
+            margin: 0 0 10px 0;
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.6;
+          "
+        >
+          Thank you for maintaining our high standards of customer service.
+        </p>
+        <p style="margin: 0; color: #6b7280; font-size: 14px">
+          Best regards,<br />
+          <strong>BreastBeacon Admin Team</strong>
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div
+        style="
+          background: #f8fafc;
+          padding: 20px;
+          text-align: center;
+          border-top: 1px solid #e5e7eb;
+        "
+      >
+        <div style="margin-bottom: 15px">
+          <a
+            href="#"
+            style="
+              color: #6b7280;
+              text-decoration: none;
+              font-size: 12px;
+              margin: 0 10px;
+            "
+            >Admin Dashboard</a
+          >
+          <a
+            href="#"
+            style="
+              color: #6b7280;
+              text-decoration: none;
+              font-size: 12px;
+              margin: 0 10px;
+            "
+            >Support Guidelines</a
+          >
+          <a
+            href="#"
+            style="
+              color: #6b7280;
+              text-decoration: none;
+              font-size: 12px;
+              margin: 0 10px;
+            "
+            >Contact</a
+          >
+        </div>
+        <div style="color: #9ca3af; font-size: 11px">
+          &copy; {{currentYear}} BreastBeacon. All rights reserved.<br />
+          This is an automated team notification.
+        </div>
+      </div>
+    </div>
+
+    <!--[if mso]>
+    </td></tr></table>
+    </div>
+    <![endif]-->
+  </body>
+</html>

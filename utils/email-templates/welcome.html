@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to BreastBeacon</title>
+    <!--[if mso]>
+      <style type="text/css">
+        body,
+        table,
+        td,
+        th,
+        div,
+        p,
+        a {
+          font-family: Arial, sans-serif !important;
+        }
+      </style>
+    <![endif]-->
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f0f9ff;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #374151;
+    "
+  >
+    <!--[if mso]>
+    <div style="background-color: #f0f9ff; padding: 20px;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td>
+    <![endif]-->
+
+    <div
+      style="
+        max-width: 600px;
+        margin: 20px auto;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+      "
+    >
+      <!-- Header -->
+      <div
+        style="
+          background: #3b82f6;
+          color: white;
+          padding: 30px 20px;
+          text-align: center;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center">
+              <div
+                style="
+                  display: inline-block;
+                  background: rgba(255, 255, 255, 0.2);
+                  padding: 12px;
+                  border-radius: 8px;
+                  margin-bottom: 15px;
+                "
+              >
+                <span style="color: white; font-size: 20px">🏥</span>
+              </div>
+              <h1
+                style="
+                  font-size: 24px;
+                  font-weight: bold;
+                  margin: 0 0 8px 0;
+                  color: white;
+                "
+              >
+                BreastBeacon
+              </h1>
+              <p style="font-size: 16px; margin: 0; opacity: 0.9">
+                Welcome to BreastBeacon!
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Content -->
+      <div style="padding: 30px 20px">
+        <!-- Welcome Section -->
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="margin-bottom: 30px"
+        >
+          <tr>
+            <td align="center">
+              <div
+                style="
+                  background: #10b981;
+                  color: white;
+                  width: 60px;
+                  height: 60px;
+                  border-radius: 12px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  margin: 0 auto 15px;
+                "
+              >
+                <span style="font-size: 24px">👋</span>
+              </div>
+              <h2 style="margin: 0 0 8px 0; color: #1f2937; font-size: 20px">
+                Hello {{firstName}} {{lastName}},
+              </h2>
+              <p style="color: #6b7280; margin: 0; font-size: 14px">
+                Thank you for joining our medical imaging platform
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- User Info Card -->
+        <div
+          style="
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+            margin: 20px 0;
+          "
+        >
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="padding-bottom: 15px">
+                <div style="font-size: 16px; font-weight: bold; color: #1e293b">
+                  Account Details
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="50%" style="padding: 8px 0">
+                      <div
+                        style="
+                          font-size: 11px;
+                          color: #64748b;
+                          font-weight: bold;
+                          text-transform: uppercase;
+                        "
+                      >
+                        Email Address
+                      </div>
+                      <div
+                        style="
+                          font-size: 14px;
+                          color: #1e293b;
+                          font-weight: 600;
+                        "
+                      >
+                        {{email}}
+                      </div>
+                    </td>
+                    <td width="50%" style="padding: 8px 0">
+                      <div
+                        style="
+                          font-size: 11px;
+                          color: #64748b;
+                          font-weight: bold;
+                          text-transform: uppercase;
+                        "
+                      >
+                        User ID
+                      </div>
+                      <div
+                        style="
+                          font-size: 14px;
+                          color: #1e293b;
+                          font-weight: 600;
+                        "
+                      >
+                        {{userId}}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="50%" style="padding: 8px 0">
+                      <div
+                        style="
+                          font-size: 11px;
+                          color: #64748b;
+                          font-weight: bold;
+                          text-transform: uppercase;
+                        "
+                      >
+                        Account Type
+                      </div>
+                      <div
+                        style="
+                          background: #3b82f6;
+                          color: white;
+                          padding: 4px 12px;
+                          border-radius: 12px;
+                          font-size: 12px;
+                          font-weight: bold;
+                          display: inline-block;
+                          text-transform: capitalize;
+                        "
+                      >
+                        {{role}}
+                      </div>
+                    </td>
+                    <td width="50%" style="padding: 8px 0">
+                      <div
+                        style="
+                          font-size: 11px;
+                          color: #64748b;
+                          font-weight: bold;
+                          text-transform: uppercase;
+                        "
+                      >
+                        Registration Date
+                      </div>
+                      <div
+                        style="
+                          font-size: 14px;
+                          color: #1e293b;
+                          font-weight: 600;
+                        "
+                      >
+                        {{registrationDate}}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Instruction Text -->
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="margin: 25px 0"
+        >
+          <tr>
+            <td align="center">
+              <p
+                style="
+                  color: #6b7280;
+                  margin: 0;
+                  font-size: 14px;
+                  line-height: 1.6;
+                "
+              >
+                To complete your registration and activate your account, please
+                verify your email address.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Verify Button -->
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="margin: 30px 0"
+        >
+          <tr>
+            <td align="center">
+              <a
+                href="{{verificationUrl}}"
+                style="
+                  display: inline-block;
+                  background: #10b981;
+                  color: white;
+                  text-decoration: none;
+                  padding: 16px 32px;
+                  border-radius: 8px;
+                  font-weight: bold;
+                  font-size: 16px;
+                  text-align: center;
+                "
+              >
+                ✅ Verify Email Address
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Manual Link -->
+        <div
+          style="
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+          "
+        >
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding-bottom: 12px">
+                <div style="font-size: 14px; font-weight: 600; color: #64748b">
+                  Or copy and paste this link in your browser:
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center">
+                <div
+                  style="
+                    background: white;
+                    padding: 12px;
+                    border-radius: 6px;
+                    border: 1px solid #e2e8f0;
+                    font-size: 12px;
+                    color: #475569;
+                    font-family: 'Courier New', monospace;
+                    word-break: break-all;
+                  "
+                >
+                  {{verificationUrl}}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Expiry Notice -->
+        <div
+          style="
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+          "
+        >
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center">
+                <p
+                  style="
+                    margin: 0;
+                    color: #92400e;
+                    font-size: 13px;
+                    font-weight: 600;
+                  "
+                >
+                  ⏰ This verification link will expire in 24 hours
+                </p>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Features Section -->
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="margin: 30px 0"
+        >
+          <tr>
+            <td align="center" style="padding-bottom: 20px">
+              <div style="font-size: 18px; font-weight: bold; color: #1f2937">
+                What you'll get access to:
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #dbeafe;
+                            color: #3b82f6;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 6px;
+                            text-align: center;
+                            font-size: 12px;
+                          "
+                        >
+                          🖼️
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Advanced medical imaging tools
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #dbeafe;
+                            color: #3b82f6;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 6px;
+                            text-align: center;
+                            font-size: 12px;
+                          "
+                        >
+                          👥
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Collaborate with healthcare teams
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #dbeafe;
+                            color: #3b82f6;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 6px;
+                            text-align: center;
+                            font-size: 12px;
+                          "
+                        >
+                          ⚡
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Real-time analysis features
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td width="50%" style="padding: 8px; vertical-align: top">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="
+                            background: #dbeafe;
+                            color: #3b82f6;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 6px;
+                            text-align: center;
+                            font-size: 12px;
+                          "
+                        >
+                          🔒
+                        </td>
+                        <td style="padding-left: 8px">
+                          <div
+                            style="
+                              font-size: 12px;
+                              color: #475569;
+                              line-height: 1.4;
+                            "
+                          >
+                            Secure patient data management
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Signature -->
+        <div
+          style="
+            padding: 25px 0;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 30px;
+          "
+        >
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center">
+                <p
+                  style="
+                    margin: 0 0 10px 0;
+                    color: #6b7280;
+                    font-size: 14px;
+                    line-height: 1.6;
+                  "
+                >
+                  If you have any questions or need assistance, our support team
+                  is here to help.
+                </p>
+                <p style="margin: 0; color: #6b7280; font-size: 14px">
+                  Best regards,<br />
+                  <strong>The BreastBeacon Team</strong>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div
+        style="
+          background: #f8fafc;
+          padding: 25px;
+          text-align: center;
+          border-top: 1px solid #e5e7eb;
+        "
+      >
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-bottom: 15px">
+              <a
+                href="#"
+                style="
+                  color: #6b7280;
+                  text-decoration: none;
+                  font-size: 12px;
+                  margin: 0 10px;
+                "
+                >Help Center</a
+              >
+              <a
+                href="#"
+                style="
+                  color: #6b7280;
+                  text-decoration: none;
+                  font-size: 12px;
+                  margin: 0 10px;
+                "
+                >Privacy Policy</a
+              >
+              <a
+                href="#"
+                style="
+                  color: #6b7280;
+                  text-decoration: none;
+                  font-size: 12px;
+                  margin: 0 10px;
+                "
+                >Terms of Service</a
+              >
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div style="color: #9ca3af; font-size: 11px">
+                &copy; {{currentYear}} BreastBeacon. All rights reserved.<br />
+                This is an automated message. Please do not reply to this email.
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!--[if mso]>
+    </td></tr></table>
+    </div>
+    <![endif]-->
+  </body>
+</html>

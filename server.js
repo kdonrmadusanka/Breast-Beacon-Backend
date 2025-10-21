@@ -4,6 +4,7 @@ import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
+import contactRoutes from './routes/contact.routes.js';
 
 import { testEmailConnection } from './utils/emailService.js';
 
@@ -30,6 +31,7 @@ connectDB();
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Default route
 app.get('/', (req, res) => {
@@ -50,5 +52,5 @@ app.listen(PORT, () => {
 });
 
 testEmailConnection().then(() => {
-  console.log('Resend is ready!');
+  console.log('Node Mailer is ready!');
 });
